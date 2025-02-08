@@ -1,21 +1,13 @@
 #ifndef NEURON_H
 #define NEURON_H
 
-#include <stdlib.h>
-#include <stdio.h>
+#include "neurons/LIF.h"
+#include "neurons/FLIF.h"
 
-// Neuron structure
-typedef struct {
-    double membrane_potential;
-    double threshold;
-    double *weights;  // Synaptic weights
-    int num_inputs;
-} Neuron;
-
-// Function prototypes
-Neuron create_neuron(int num_inputs);
-void update_neuron(Neuron *neuron, double *inputs);
-void free_neuron(Neuron *neuron);
+typedef enum {
+    LIF,
+    FLIF
+} NeuronType;
 
 #endif // NEURON_H
 

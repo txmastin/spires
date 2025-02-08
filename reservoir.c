@@ -2,33 +2,40 @@
 #include "reservoir.h"
 
 // Create a reservoir of neurons
-Reservoir create_reservoir(int num_neurons, int num_inputs, int num_outputs, double spectral_radius, double input_strength, double connectivity, ConnectivityType connectivity_type) {
-    Reservoir reservoir;
-    reservoir.num_neurons = num_neurons;
-    reservoir.num_inputs = num_inputs;
-    reservoir.num_outputs = num_outputs;
-    reservoir.spectral_radius = spectral_radius;
-    reservoir.input_strength = input_strength;
-    reservoir.connectivity = connectivity; 
-    reservoir.connectivity_type = connectivity_type;
-
-    reservoir.neurons = (Neuron *)malloc(num_neurons * sizeof(Neuron));
+Reservoir* create_reservoir(int num_neurons, int num_inputs, int num_outputs, double spectral_radius, double input_strength, double connectivity, ConnectivityType connectivity_type, NeuronType neuron_type) {
+    Reservoir *reservoir = (Reservoir*)malloc(sizeof(Reservoir));
+    if(reservoir == NULL) {
+        fprintf(stderr, "Error allocating memory for reservoir of size %d\n", num_neurons);
+        return NULL;
+    }
+    
+    reservoir->num_neurons = num_neurons;
+    reservoir->num_inputs = num_inputs;
+    reservoir->num_outputs = num_outputs;
+    reservoir->spectral_radius = spectral_radius;
+    reservoir->input_strength = input_strength;
+    reservoir->connectivity = connectivity; 
+    reservoir->connectivity_type = connectivity_type;
+    reservoir->neuron_type = neuron_type;
+    
+    reservoir->neurons = (void**)malloc(num_neurons * sizeof(void*));
+    
     if (!reservoir.neurons) {
         fprintf(stderr, "Memory allocation failed for reservoir neurons\n");
-        exit(1);
+        return NULL;
     }
 
     for (int i = 0; i < num_neurons; i++) {
-        reservoir.neurons[i] = create_neuron(num_inputs); // FIX THIS LATER
+        reservoir->neurons[i] = init_neuron(neuron_type); 
     }
 
     return reservoir;
-}
+   }
 
 // Update all neurons in the reservoir
 void update_reservoir(Reservoir *reservoir, double *inputs) {
     for (int i = 0; i < reservoir->num_neurons; i++) {
-        update_neuron(&reservoir->neurons[i], inputs);
+        update_neuron(reservoir->neurons[i], inputs);
     }
 }
 
