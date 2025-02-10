@@ -22,6 +22,7 @@ Reservoir* create_reservoir(int num_neurons, int num_inputs, int num_outputs, do
     
     if (!reservoir.neurons) {
         fprintf(stderr, "Memory allocation failed for reservoir neurons\n");
+        free(reservoir); 
         return NULL;
     }
 

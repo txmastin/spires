@@ -9,8 +9,8 @@ typedef struct {
     int spiking;
 } LIFNeuron;
 
-LIFNeuron init_LIF(double V, double V_th, double V_0, double leak_rate);
-void update_LIF(LIFNeuron *LIF, double *inputs);
-void free_LIF(LIFNeuron *LIF);
+LIFNeuron* init_LIF(double V, double V_th, double V_0, double leak_rate);
+void update_LIF(LIFNeuron *neuron, double *inputs);
+void free_LIF(LIFNeuron **neuron);
 
 #endif

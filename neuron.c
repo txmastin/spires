@@ -1,44 +1,39 @@
+#include<stdio.h>
+#include<stdlib.h>
 #include "neuron.h"
 
 // Create a neuron with random weights
-Neuron create_neuron(int num_inputs) {
-    Neuron neuron;
-    neuron.membrane_potential = 0.0;  // Resting potential
-    neuron.threshold = 0.9;
-    neuron.num_inputs = num_inputs;
-    neuron.weights = (double *)malloc(num_inputs * sizeof(double));
-
-    if (!neuron.weights) {
-        fprintf(stderr, "Memory allocation failed for weights\n");
-        exit(1);
+void* init_neuron(NeuronType type) {
+    void* neuron = NULL;
+    switch(type) {
+        case LIF: 
+            neuron = (LIFNeuron *)init_LIF();
+            break;
+        case FLIF:
+            neuron = (FLIFNeuron *)init_FLIF();
+            break;
+        default:
+            fprintf(stderr, "Neuron type unavailable.\n");
     }
-
-    // Initialize random weights
-    for (int i = 0; i < num_inputs; i++) {
-        neuron.weights[i] = (double)rand() / RAND_MAX * 2.0 - 1.0; // Random between -1 and 1
-    }
-
     return neuron;
 }
 
 // Update neuron state based on inputs
-void update_neuron(Neuron *neuron, double *inputs) {
-    double weighted_sum = 0.0;
+void update_neuron(void *neuron, double *inputs) {
     
-    for (int i = 0; i < neuron->num_inputs; i++) {
-        weighted_sum += inputs[i] * neuron->weights[i];
-    }
-
-    neuron->membrane_potential += weighted_sum;
-
-    if (neuron->membrane_potential >= neuron->threshold) {
-        printf("Neuron spiked!\n");
-        neuron->membrane_potential = 0.0;  // Reset after spike
-    }
 }
 
 // Free allocated memory
-void free_neuron(Neuron *neuron) {
-    free(neuron->weights);
+void free_neuron(void** neuron, NeuronType type) {
+    if (!neuron || !(*neuron)) { return; };
+    switch(type) {
+        case LIF:
+            free_LIF((LIFNeuron**)neuron);
+            break;
+        case FLIF:
+            free_FLIF((FLIFNeuron**)neuron);
+            break;
+    }
+    *neuron = NULL;
 }
 
