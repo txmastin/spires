@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "reservoir.h"
 
 // Create a reservoir of neurons
@@ -20,7 +21,7 @@ Reservoir* create_reservoir(int num_neurons, int num_inputs, int num_outputs, do
     
     reservoir->neurons = (void**)malloc(num_neurons * sizeof(void*));
     
-    if (!reservoir.neurons) {
+    if (!(reservoir->neurons)) {
         fprintf(stderr, "Memory allocation failed for reservoir neurons\n");
         free(reservoir); 
         return NULL;
@@ -41,18 +42,27 @@ void update_reservoir(Reservoir *reservoir, double *inputs) {
 }
 
 // Free reservoir memory
-void free_reservoir(Reservoir *reservoir) {
-    for (int i = 0; i < reservoir->num_neurons; i++) {
-        free_neuron(&reservoir->neurons[i]);
+void free_reservoir(Reservoir **reservoir) {
+    if (!reservoir || !(*reservoir)) { return; }
+
+    printf("Freeing reservoir at address: %p\n", (void*)(*reservoir));
+    printf("Freeing neurons at address: %p\n", (void*)(*reservoir)->neurons);
+    printf("Freeing W_in at address: %p\n", (void*)(*reservoir)->W_in);
+    printf("Freeing W_out at address: %p\n", (void*)(*reservoir)->W_out);
+    printf("Freeing W at address: %p\n", (void*)(*reservoir)->W);
+
+    for (int i = 0; i < (*reservoir)->num_neurons; i++) {
+        free_neuron(&((*reservoir)->neurons[i]), (*reservoir)->neuron_type);
     }
-    free(reservoir->neurons);
-    free(reservoir->W_in);
-    free(reservoir->W_out);
-    free(reservoir->W);
-    reservoir->neurons = NULL;
-    reservoir->W_in = NULL;
-    reservoir->W_out = NULL;
-    reservoir->W = NULL;
+    free((*reservoir)->neurons);
+    free((*reservoir)->W_in);
+    free((*reservoir)->W_out);
+    free((*reservoir)->W);
+    //(*reservoir)->W_in = NULL;
+    //(*reservoir)->W_out = NULL;
+    //(*reservoir)->W = NULL;
+    free(*reservoir);
+    *reservoir = NULL;
 }
 
 // Initialize weights

@@ -1,14 +1,14 @@
 # Compiler
 CC = clang
 
-# Compiler flags
-CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -fsanitize=undefined -g
+# Compiler flags (-fsanitize=address currently removed for compatibility with gdb)
+CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -g
 
 # Output executable name
 TARGET = reservoir_sim
 
 # Source files
-SRC = main.c neuron.c LIF.c FLIF.c reservoir.c
+SRC = main.c neuron.c neurons/LIF.c neurons/FLIF.c reservoir.c
 OBJ = $(SRC:.c=.o)
 
 # Header files (for dependencies)

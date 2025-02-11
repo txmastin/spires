@@ -2,15 +2,14 @@
 #include<stdlib.h>
 #include "neuron.h"
 
-// Create a neuron with random weights
 void* init_neuron(NeuronType type) {
     void* neuron = NULL;
     switch(type) {
         case LIF: 
-            neuron = (LIFNeuron *)init_LIF();
+            neuron = (LIFNeuron *)init_LIF(0.0,0.7,0.0,0.2);
             break;
         case FLIF:
-            neuron = (FLIFNeuron *)init_FLIF();
+            neuron = (FLIFNeuron *)init_FLIF(0.0,0.7,0.0,0.2,0.9);
             break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
@@ -18,12 +17,10 @@ void* init_neuron(NeuronType type) {
     return neuron;
 }
 
-// Update neuron state based on inputs
 void update_neuron(void *neuron, double *inputs) {
     
 }
 
-// Free allocated memory
 void free_neuron(void** neuron, NeuronType type) {
     if (!neuron || !(*neuron)) { return; };
     switch(type) {

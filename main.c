@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "reservoir.h"
 
-int main() {
+int main(void) {
     // Define reservoir parameters
     int num_neurons = 100;
     int input_size = 10;
@@ -24,6 +24,8 @@ int main() {
     }
 
     printf("Reservoir created successfully with %d neurons.\n", num_neurons);
+    
+    if(!init_weights(reservoir)) { printf("Weights initialized successfully\n");}
 
     // Create dummy input
     double inputs[input_size];
@@ -38,8 +40,8 @@ int main() {
     }
 
     // Free memory
-    free_reservoir(reservoir);
-
+    free_reservoir(&reservoir);
+    reservoir = NULL;
     // Check if memory was successfully freed
     if (reservoir == NULL) {
         printf("Reservoir successfully freed.\n");
@@ -47,6 +49,7 @@ int main() {
         printf("Warning: Reservoir was not properly freed.\n");
     }
 
+    printf("Successfull reached end of program.\n");
     return 0;
 }
 
