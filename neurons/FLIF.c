@@ -23,9 +23,9 @@ void update_FLIF(FLIFNeuron *neuron, double *inputs){
     
 }
 
-void free_FLIF(FLIFNeuron **neuron) {
-    if (neuron && *neuron) { 
-        free(*neuron);
-        *neuron = NULL;
+void free_FLIF(FLIFNeuron *neuron) {
+    if (neuron) { 
+        free(neuron);
+        neuron = NULL;
     }
 } 

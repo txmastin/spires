@@ -11,6 +11,6 @@ typedef struct {
 
 LIFNeuron* init_LIF(double V, double V_th, double V_0, double leak_rate);
 void update_LIF(LIFNeuron *neuron, double *inputs);
-void free_LIF(LIFNeuron **neuron);
+void free_LIF(LIFNeuron *neuron);
 
-#endif
+#endif // LIF_H

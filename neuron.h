@@ -4,14 +4,14 @@
 #include "neurons/LIF.h"
 #include "neurons/FLIF.h"
 
-typedef enum {
+enum NeuronType {
     LIF,
     FLIF
-} NeuronType;
+};
 
-void* init_neuron(NeuronType neuron_type);
+void* init_neuron(enum NeuronType neuron_type);
 void update_neuron(void *neuron, double *inputs);
-void free_neuron(void **neuron, NeuronType type);
+void free_neuron(void *neuron, enum NeuronType type);
 
 #endif // NEURON_H
 

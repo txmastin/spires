@@ -3,15 +3,15 @@
 
 #include "neuron.h"
 
-typedef enum {
+enum ConnectivityType {
     DENSE,
     SPARSE,
     SMALL_WORLD,
     SCALE_FREE
-} ConnectivityType;
+};
 
-typedef struct {
-    void **neurons; // ptr to void ptr used to dynamically change neuron type
+struct Reservoir {
+    void **neurons; 
     int num_neurons;
     int num_inputs;
     int num_outputs; 
@@ -21,14 +21,18 @@ typedef struct {
     double *W_in;
     double *W_out;
     double *W;
-    ConnectivityType connectivity_type;
-    NeuronType neuron_type;
-} Reservoir;
+    enum ConnectivityType connectivity_type;
+    enum NeuronType neuron_type;
+};
 
-Reservoir* create_reservoir(int num_neurons, int num_inputs, int num_outputs, double spectral_radius, double input_strength, double connectivity, ConnectivityType connectivity_type, NeuronType neuron_type);
-void update_reservoir(Reservoir *reservoir, double *inputs);
-void free_reservoir(Reservoir **reservoir);
-int init_weights(Reservoir *reservoir);
+struct Reservoir* create_reservoir(
+    int num_neurons, int num_inputs, int num_outputs,
+    double spectral_radius, double input_strength, double connectivity, 
+    enum ConnectivityType connectivity_type, enum NeuronType neuron_type);
+
+void update_reservoir(struct Reservoir *reservoir, double *inputs);
+void free_reservoir(struct Reservoir *reservoir);
+int init_weights(struct Reservoir *reservoir);
 
 #endif // RESERVOIR_H
 

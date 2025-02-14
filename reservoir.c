@@ -3,8 +3,11 @@
 #include "reservoir.h"
 
 // Create a reservoir of neurons
-Reservoir* create_reservoir(int num_neurons, int num_inputs, int num_outputs, double spectral_radius, double input_strength, double connectivity, ConnectivityType connectivity_type, NeuronType neuron_type) {
-    Reservoir *reservoir = (Reservoir*)malloc(sizeof(Reservoir));
+struct Reservoir* create_reservoir(
+    int num_neurons, int num_inputs, int num_outputs, 
+    double spectral_radius, double input_strength, double connectivity, 
+    enum ConnectivityType connectivity_type, enum NeuronType neuron_type) {
+    struct Reservoir *reservoir = malloc(sizeof(*reservoir));
     if(reservoir == NULL) {
         fprintf(stderr, "Error allocating memory for reservoir of size %d\n", num_neurons);
         return NULL;
@@ -34,55 +37,54 @@ Reservoir* create_reservoir(int num_neurons, int num_inputs, int num_outputs, do
     return reservoir;
    }
 
-// Update all neurons in the reservoir
-void update_reservoir(Reservoir *reservoir, double *inputs) {
+void update_reservoir(struct Reservoir *reservoir, double *inputs) {
     for (int i = 0; i < reservoir->num_neurons; i++) {
         update_neuron(reservoir->neurons[i], inputs);
     }
 }
 
-// Free reservoir memory
-void free_reservoir(Reservoir **reservoir) {
-    if (!reservoir || !(*reservoir)) { return; }
+void free_reservoir(struct Reservoir *reservoir) {
+    if (!reservoir) { return; }
 
-    printf("Freeing reservoir at address: %p\n", (void*)(*reservoir));
-    printf("Freeing neurons at address: %p\n", (void*)(*reservoir)->neurons);
-    printf("Freeing W_in at address: %p\n", (void*)(*reservoir)->W_in);
-    printf("Freeing W_out at address: %p\n", (void*)(*reservoir)->W_out);
-    printf("Freeing W at address: %p\n", (void*)(*reservoir)->W);
+    printf("Freeing reservoir at address: %p\n", (void*)reservoir);
+    printf("Freeing neurons at address: %p\n", (void*)reservoir->neurons);
+    printf("Freeing W_in at address: %p\n", (void*)reservoir->W_in);
+    printf("Freeing W_out at address: %p\n", (void*)reservoir->W_out);
+    printf("Freeing W at address: %p\n", (void*)reservoir->W);
 
-    for (int i = 0; i < (*reservoir)->num_neurons; i++) {
-        free_neuron(&((*reservoir)->neurons[i]), (*reservoir)->neuron_type);
+    for (int i = 0; i < reservoir->num_neurons; i++) {
+        free_neuron(reservoir->neurons[i], reservoir->neuron_type);
+        reservoir->neurons[i] = NULL;
     }
-    free((*reservoir)->neurons);
-    free((*reservoir)->W_in);
-    free((*reservoir)->W_out);
-    free((*reservoir)->W);
-    //(*reservoir)->W_in = NULL;
-    //(*reservoir)->W_out = NULL;
-    //(*reservoir)->W = NULL;
-    free(*reservoir);
-    *reservoir = NULL;
+    free(reservoir->neurons);
+    free(reservoir->W_in);
+    free(reservoir->W_out);
+    free(reservoir->W);
+    reservoir->W_in = NULL;
+    reservoir->W_out = NULL;
+    reservoir->W = NULL;
+    free(reservoir);
+    reservoir = NULL;
 }
 
 // Initialize weights
-int init_weights(Reservoir *reservoir) {
-    reservoir->W_in = (double *)malloc(reservoir->num_neurons * sizeof(double)); 
+int init_weights(struct Reservoir *reservoir) {
+    reservoir->W_in = malloc(reservoir->num_neurons * sizeof(double)); 
     if(reservoir->W_in == NULL) {
         fprintf(stderr, "Error allocating memory for W_in, size of reservoir: %d\n", reservoir->num_neurons);
-        return 1;
+        return EXIT_FAILURE;
     }
     
-    reservoir->W_out = (double *)malloc(reservoir->num_neurons * sizeof(double));
+    reservoir->W_out = malloc(reservoir->num_neurons * sizeof(double));
     if(reservoir->W_out == NULL) {
         fprintf(stderr, "Error allocating memory for W_out, size of reservoir: %d\n", reservoir->num_neurons);
         free(reservoir->W_in);
         reservoir->W_in = NULL; 
-        return 1;
+        return EXIT_FAILURE;
     }
     
     // calloc here to ensure non-assigned weights are automatically clamped to 0.0, e.g., in sparse connectivity
-    reservoir->W = (double *)calloc(reservoir->num_neurons * reservoir->num_neurons, sizeof(double)); 
+    reservoir->W = calloc(reservoir->num_neurons * reservoir->num_neurons, sizeof(double)); 
     
     if (reservoir->W == NULL) {
         fprintf(stderr, "Error allocating memory for W, size of reservoir: %d\n", reservoir->num_neurons);
@@ -90,7 +92,7 @@ int init_weights(Reservoir *reservoir) {
         free(reservoir->W_out);
         reservoir->W_in = NULL;
         reservoir->W_out = NULL;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     switch(reservoir->connectivity_type) {
@@ -125,5 +127,5 @@ int init_weights(Reservoir *reservoir) {
             break;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

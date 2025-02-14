@@ -10,17 +10,17 @@ int main(void) {
     double spectral_radius = 0.9;
     double sparsity = 0.5;
     double weight_scale = 0.1;
-    ConnectivityType connectivity = DENSE;
-    NeuronType neuron_type = LIF;
+    enum ConnectivityType connectivity = DENSE;
+    enum NeuronType neuron_type = LIF;
 
     // Create reservoir
-    Reservoir *reservoir = create_reservoir(num_neurons, input_size, output_size,
+    struct Reservoir *reservoir = create_reservoir(num_neurons, input_size, output_size,
                                             spectral_radius, sparsity, weight_scale,
                                             connectivity, neuron_type);
     
     if (!reservoir) {
         fprintf(stderr, "Error: Failed to create reservoir\n");
-        return 1;
+        return EXIT_FAILURE;
     }
 
     printf("Reservoir created successfully with %d neurons.\n", num_neurons);
@@ -40,7 +40,7 @@ int main(void) {
     }
 
     // Free memory
-    free_reservoir(&reservoir);
+    free_reservoir(reservoir);
     reservoir = NULL;
     // Check if memory was successfully freed
     if (reservoir == NULL) {
@@ -50,6 +50,7 @@ int main(void) {
     }
 
     printf("Successfull reached end of program.\n");
-    return 0;
+    
+    return EXIT_SUCCESS;
 }
 

@@ -2,7 +2,7 @@
 #include<stdlib.h>
 #include "neuron.h"
 
-void* init_neuron(NeuronType type) {
+void* init_neuron(enum NeuronType type) {
     void* neuron = NULL;
     switch(type) {
         case LIF: 
@@ -21,16 +21,16 @@ void update_neuron(void *neuron, double *inputs) {
     
 }
 
-void free_neuron(void** neuron, NeuronType type) {
-    if (!neuron || !(*neuron)) { return; };
+void free_neuron(void *neuron, enum NeuronType type) {
+    if (!neuron) { return; };
     switch(type) {
         case LIF:
-            free_LIF((LIFNeuron**)neuron);
+            free_LIF((LIFNeuron*)neuron);
             break;
         case FLIF:
-            free_FLIF((FLIFNeuron**)neuron);
+            free_FLIF((FLIFNeuron*)neuron);
             break;
     }
-    *neuron = NULL;
+    neuron = NULL;
 }
 

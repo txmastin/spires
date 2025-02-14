@@ -22,9 +22,9 @@ void update_LIF(LIFNeuron *neuron, double *inputs){
     
 }
 
-void free_LIF(LIFNeuron **neuron) {
-    if (neuron && *neuron) { 
-        free(*neuron);
-        *neuron = NULL;
+void free_LIF(LIFNeuron *neuron) {
+    if (neuron) { 
+        free(neuron);
+        neuron = NULL;
     }
 } 
