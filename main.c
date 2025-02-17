@@ -1,21 +1,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "reservoir.h"
+#include "math_utils.h"
 
 int main(void) {
     // Define reservoir parameters
-    int num_neurons = 100;
-    int input_size = 10;
-    int output_size = 10;
-    double spectral_radius = 0.9;
-    double sparsity = 0.5;
-    double weight_scale = 0.1;
+    size_t num_neurons = 100; 
+    size_t num_inputs = 100;
+    size_t num_outputs = 100;
+    double spectral_radius = 0.95;
+    double sparsity = 0.2;
+    double input_strength = 1.0;
     enum ConnectivityType connectivity = DENSE;
     enum NeuronType neuron_type = LIF;
 
     // Create reservoir
-    struct Reservoir *reservoir = create_reservoir(num_neurons, input_size, output_size,
-                                            spectral_radius, sparsity, weight_scale,
+    struct Reservoir *reservoir = create_reservoir(num_neurons, num_inputs, num_outputs,
+                                            spectral_radius, sparsity, input_strength,
                                             connectivity, neuron_type);
     
     if (!reservoir) {
@@ -23,20 +24,50 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    printf("Reservoir created successfully with %d neurons.\n", num_neurons);
+    printf("Reservoir created successfully with %zu neurons.\n", num_neurons);
     
-    if(!init_weights(reservoir)) { printf("Weights initialized successfully\n");}
+    int init_err = init_weights(reservoir); 
+    if(!init_err) { printf("Weights initialized successfully\n");}
+    
+    printf("Allocated weights:\n");
+    
+//    for (size_t i = 0; i < reservoir->num_neurons; i++) {
+//        for (size_t j = 0; j < reservoir->num_neurons; j++) {
+//            printf("%lf ", reservoir->W[i*reservoir->num_neurons + j]);
+//        }
+//        printf("\n");
+//    }
 
-    // Create dummy input
-    double inputs[input_size];
-    for (int i = 0; i < input_size; i++) {
-        inputs[i] = (double)i / input_size;  // Simple ramp input
+    rescale_matrix(reservoir->W, reservoir->num_neurons, reservoir->spectral_radius);
+ 
+    double spec_radius = calc_spectral_radius(reservoir->W, reservoir->num_neurons);
+
+    printf("Spectral Radius:\t%lf\n", spec_radius);
+  
+        // Create test inputs
+    size_t input_length = 100; 
+    double inputs[input_length];
+    for (size_t i = 0; i < input_length; i++) {
+        inputs[i] = 2.0;  // Simple constant input
     }
-
-    // Update the reservoir a few times
-    for (int t = 0; t < 5; t++) {
-        update_reservoir(reservoir, inputs);
-        printf("Reservoir updated at time step %d.\n", t);
+    
+    for (size_t i = 0; i < input_length; i++) {
+        printf("%f ", inputs[i]);
+    }
+    printf("\n");
+    // run inputs through reservoir for num_epochs
+    size_t num_epochs = 5;
+    
+    double reservoir_state = read_reservoir(reservoir);
+    printf("Reservoir state: %lf\n", reservoir_state);
+    
+    double current_spikes = 0.0;
+    for (size_t i = 0; i < input_length; i++) { 
+        step_reservoir(reservoir, inputs[i]);
+        reservoir_state = read_reservoir(reservoir);
+        current_spikes = read_spikes(reservoir); 
+        
+        printf("\ntotal spikes:\t%f\n", current_spikes);
     }
 
     // Free memory

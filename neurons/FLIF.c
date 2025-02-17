@@ -14,12 +14,12 @@ FLIFNeuron* init_FLIF(double V, double V_th, double V_0, double leak_rate, doubl
     neuron->V_0 = V_0;
     neuron->leak_rate = leak_rate;
     neuron->alpha = alpha;
-    neuron->spiking = 0;
+    neuron->spike = 0;
     
     return neuron;
 }
 
-void update_FLIF(FLIFNeuron *neuron, double *inputs){
+void update_FLIF(FLIFNeuron *neuron, double inputs){
     
 }
 

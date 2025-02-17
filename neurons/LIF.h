@@ -6,11 +6,11 @@ typedef struct {
     double V_th;
     double V_0;
     double leak_rate;
-    int spiking;
+    double spike;
 } LIFNeuron;
 
 LIFNeuron* init_LIF(double V, double V_th, double V_0, double leak_rate);
-void update_LIF(LIFNeuron *neuron, double *inputs);
+void update_LIF(LIFNeuron *neuron, double input);
 void free_LIF(LIFNeuron *neuron);
 
 #endif // LIF_H
