@@ -2,14 +2,14 @@
 #include<stdlib.h>
 #include "neuron.h"
 
-void* init_neuron(enum NeuronType type) {
+void* init_neuron(enum NeuronType type, double *neuron_params) {
     void* neuron = NULL;
     switch(type) {
         case LIF: 
-            neuron = (LIFNeuron *)init_LIF(0.0,0.7,0.0,0.2);
+            neuron = (LIFNeuron *)init_LIF(neuron_params);
             break;
         case FLIF:
-            neuron = (FLIFNeuron *)init_FLIF(0.0,0.7,0.0,0.2,0.9);
+            neuron = (FLIFNeuron *)init_FLIF(neuron_params);
             break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");

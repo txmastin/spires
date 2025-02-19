@@ -10,7 +10,7 @@ typedef struct {
     double alpha;
 } FLIFNeuron;
 
-FLIFNeuron* init_FLIF(double V, double V_th, double V_0, double leak_rate, double alpha);
+FLIFNeuron* init_FLIF(double *neuron_params);
 void update_FLIF(FLIFNeuron *neuron, double inputs);
 void free_FLIF(FLIFNeuron *neuron);
 

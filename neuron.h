@@ -9,7 +9,7 @@ enum NeuronType {
     FLIF
 };
 
-void* init_neuron(enum NeuronType type);
+void* init_neuron(enum NeuronType type, double *neuron_params);
 void update_neuron(void *neuron, enum NeuronType type, double input);
 void free_neuron(void *neuron, enum NeuronType type);
 double get_neuron_state(void *neuron, enum NeuronType type);

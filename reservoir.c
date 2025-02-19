@@ -4,11 +4,10 @@
 #include "reservoir.h"
 #include "math_utils.h"
 
-// Create a reservoir of neurons
 struct Reservoir* create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs, 
     double spectral_radius, double input_strength, double connectivity, 
-    enum ConnectivityType connectivity_type, enum NeuronType neuron_type) {
+    enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params) {
 
     struct Reservoir *reservoir = malloc(sizeof(*reservoir));
     if (reservoir == NULL) {
@@ -34,19 +33,21 @@ struct Reservoir* create_reservoir(
     }
 
     for (size_t i = 0; i < num_neurons; i++) {
-        reservoir->neurons[i] = init_neuron(neuron_type); 
+        reservoir->neurons[i] = init_neuron(neuron_type, neuron_params); 
     }
 
     return reservoir;
 }
 
+
 // send input to each neuron
 // todo break inputs off to send only to 'num_inputs' neurons
+
 void step_reservoir(struct Reservoir *reservoir, double input) {
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         double neuron_input = input * reservoir->W_in[i] * reservoir->input_strength;
-        for (size_t j = i; j < reservoir->num_neurons; j++) {
-            // add inputs from other spiking neurons 
+        for (size_t j = 0; j < reservoir->num_neurons; j++) {
+            // add inputs from other spiking neurons
             neuron_input += get_neuron_spike(reservoir->neurons[j], reservoir->neuron_type) * reservoir->W[i * reservoir->num_neurons + j];
         } 
         update_neuron(reservoir->neurons[i], reservoir->neuron_type, neuron_input);
@@ -78,7 +79,7 @@ double read_spikes(struct Reservoir *reservoir) {
         total_activity += spike;
         //printf("%f ", spike);
     }
-    printf("%f", total_activity);
+    printf("%d\n", (int)total_activity);
     
     return total_activity;
 }
@@ -107,7 +108,9 @@ void free_reservoir(struct Reservoir *reservoir) {
     reservoir = NULL;
 }
 
-// Initialize weights
+// break this into smaller functions
+// also consider cases in which i=j during weight allocations (i.e., self connections)
+
 int init_weights(struct Reservoir *reservoir) {
     reservoir->W_in = malloc(reservoir->num_neurons * sizeof(double)); 
     if(reservoir->W_in == NULL) {

@@ -23,12 +23,13 @@ struct Reservoir {
     double *W;
     enum ConnectivityType connectivity_type;
     enum NeuronType neuron_type;
+    double *neuron_params;
 };
 
 struct Reservoir* create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs,
     double spectral_radius, double input_strength, double connectivity, 
-    enum ConnectivityType connectivity_type, enum NeuronType neuron_type);
+    enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params);
 
 double read_reservoir(struct Reservoir *reservoir);
 double read_spikes(struct Reservoir *reservoir);

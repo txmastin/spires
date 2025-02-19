@@ -1,23 +1,22 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "reservoir.h"
 #include "math_utils.h"
 
 int main(void) {
-    // Define reservoir parameters
-    size_t num_neurons = 100; 
-    size_t num_inputs = 100;
-    size_t num_outputs = 100;
+    size_t num_neurons = 1000; 
+    size_t num_inputs = 1000;
+    size_t num_outputs = 1000;
     double spectral_radius = 0.95;
-    double sparsity = 0.2;
-    double input_strength = 1.0;
+    double sparsity = 0.175;
+    double input_strength = 1.1;
     enum ConnectivityType connectivity = DENSE;
     enum NeuronType neuron_type = LIF;
-
-    // Create reservoir
+    double neuron_params[4] = {0.0, 0.7, 0.0, 0.3};
     struct Reservoir *reservoir = create_reservoir(num_neurons, num_inputs, num_outputs,
                                             spectral_radius, sparsity, input_strength,
-                                            connectivity, neuron_type);
+                                            connectivity, neuron_type, neuron_params);
     
     if (!reservoir) {
         fprintf(stderr, "Error: Failed to create reservoir\n");
@@ -44,30 +43,20 @@ int main(void) {
 
     printf("Spectral Radius:\t%lf\n", spec_radius);
   
-        // Create test inputs
-    size_t input_length = 100; 
+    // Create test inputs
+    size_t input_length = 1000; 
     double inputs[input_length];
     for (size_t i = 0; i < input_length; i++) {
-        inputs[i] = 2.0;  // Simple constant input
+        inputs[i] = 1.25;  
     }
-    
-    for (size_t i = 0; i < input_length; i++) {
-        printf("%f ", inputs[i]);
-    }
-    printf("\n");
-    // run inputs through reservoir for num_epochs
-    size_t num_epochs = 5;
     
     double reservoir_state = read_reservoir(reservoir);
     printf("Reservoir state: %lf\n", reservoir_state);
     
-    double current_spikes = 0.0;
     for (size_t i = 0; i < input_length; i++) { 
         step_reservoir(reservoir, inputs[i]);
         reservoir_state = read_reservoir(reservoir);
-        current_spikes = read_spikes(reservoir); 
-        
-        printf("\ntotal spikes:\t%f\n", current_spikes);
+        double current_spikes = read_spikes(reservoir); 
     }
 
     // Free memory
