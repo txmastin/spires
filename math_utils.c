@@ -31,11 +31,10 @@ double calc_spectral_radius(double *A, size_t n) {
 
         // Compute largest magnitude value in y (Rayleigh Quotient estimate)
         lambda_new = 0.0;
-        int max_index = 0;
         for (size_t i = 0; i < n; i++) {
             if (fabs(y[i]) > lambda_new) {
                 lambda_new = fabs(y[i]);
-                max_index = i;
+                //double max_index = i;
             }
         }
 

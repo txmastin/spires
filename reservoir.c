@@ -6,7 +6,7 @@
 
 struct Reservoir* create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs, 
-    double spectral_radius, double input_strength, double connectivity, 
+    double learning_rate, double spectral_radius, double input_strength, double connectivity, 
     enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params) {
 
     struct Reservoir *reservoir = malloc(sizeof(*reservoir));
@@ -18,6 +18,7 @@ struct Reservoir* create_reservoir(
     reservoir->num_neurons = num_neurons;
     reservoir->num_inputs = num_inputs;
     reservoir->num_outputs = num_outputs;
+    reservoir->learning_rate = learning_rate;
     reservoir->spectral_radius = spectral_radius;
     reservoir->input_strength = input_strength;
     reservoir->connectivity = connectivity; 
@@ -61,8 +62,8 @@ void run_reservoir(struct Reservoir *reservoir, double *inputs, size_t input_len
     }
 }
 
-// read reservoir calculates the sum of neuron states * W_out
-double read_reservoir(struct Reservoir *reservoir) {
+// compute_output calculates the sum of neuron states * W_out
+double compute_output(struct Reservoir *reservoir) {
     double output = 0.0;
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         output += get_neuron_state(reservoir->neurons[i], reservoir->neuron_type) * reservoir->W_out[i];
@@ -71,17 +72,43 @@ double read_reservoir(struct Reservoir *reservoir) {
     return output;
 }
 
-double read_spikes(struct Reservoir *reservoir) {
+// compute_activity returns the sum of spikes
+double compute_activity(struct Reservoir *reservoir) {
     double total_activity = 0.0;
     double spike; 
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         spike = get_neuron_spike(reservoir->neurons[i], reservoir->neuron_type);
         total_activity += spike;
-        //printf("%f ", spike);
     }
-    printf("%d\n", (int)total_activity);
     
     return total_activity;
+}
+
+// return the neuron->V for each neuron
+double *read_reservoir_state(struct Reservoir *reservoir) {
+    double *state = malloc(reservoir->num_neurons * sizeof(double));
+    if (state == NULL) {
+        fprintf(stderr, "Memory allocation error for reservoir state\n");
+        return NULL;
+    }
+    for (size_t i = 0; i < reservoir->num_neurons; i++) {
+        state[i] = get_neuron_state(reservoir->neurons[i], reservoir->neuron_type);
+    }
+    return state; // caller will need to free()
+}
+
+void train_output_layer(struct Reservoir *reservoir, double target) {
+    double *state = read_reservoir_state(reservoir); // malloc'd in function, free here
+    if (state == NULL) { return; }
+    double prediction = compute_output(reservoir);
+    double error = target - prediction;
+
+    // update W_out
+    for (size_t i =0; i < reservoir->num_neurons; i++) {
+        reservoir->W_out[i] += state[i] * error * reservoir->learning_rate;
+    }
+
+    free(state);
 }
 
 void free_reservoir(struct Reservoir *reservoir) {
