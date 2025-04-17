@@ -20,16 +20,33 @@ void save_data(double *values, size_t length) {
 
 
 int main(void) {
-    size_t num_neurons = 100; 
-    size_t num_inputs = 100;
-    size_t num_outputs = 100;
+    size_t num_neurons = 24; 
+    size_t num_inputs = 24;
+    size_t num_outputs = 24;
     double learning_rate = 0.0005;
     double spectral_radius = 0.9;
     double sparsity = 0.175;
-    double input_strength = 5.0;
+    double input_strength = 0.1;
     enum ConnectivityType connectivity = DENSE;
-    enum NeuronType neuron_type = LIF;
-    double neuron_params[4] = {0.0, 0.7, 0.0, 0.3};
+    enum NeuronType neuron_type = FLIF_GL;
+    
+    double Cm = 500.0;
+    double gl = 25.0;
+    double Vl = 0.0;
+    double Vth = 20.0;
+    double V0 = 0.0;
+    double Vpeak = 90.0;
+    double alpha = 0.6;
+    double tref = 5.0;
+    double Tmem = 2000.0;
+    double dt = 0.05;
+    double Iapp = 870.0;
+
+    // --- Param array ---
+    double neuron_params[10] = {
+        Cm, gl, Vl, Vth, V0, Vpeak, alpha, tref, Tmem, dt
+    };
+
     struct Reservoir *reservoir = create_reservoir(num_neurons, num_inputs, num_outputs, learning_rate, spectral_radius, sparsity, input_strength, connectivity, neuron_type, neuron_params);
     
     if (!reservoir) {

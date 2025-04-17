@@ -11,11 +11,11 @@ LDFLAGS = -lm
 TARGET = reservoir_sim
 
 # Source files
-SRC = main.c neuron.c neurons/LIF.c neurons/FLIF.c reservoir.c math_utils.c
+SRC = main.c neuron.c neurons/LIF.c neurons/FLIF.c neurons/FLIF_Caputo.c neurons/FLIF_GL.c reservoir.c math_utils.c
 OBJ = $(SRC:.c=.o)
 
 # Header files (for dependencies)
-DEPS = neuron.h LIF.h FLIF.h reservoir.h math_utils.h math.h
+DEPS = neuron.h LIF.h FLIF.h FLIF_Caputo.h FLIF_GL.h reservoir.h math_utils.h math.h
 
 # Default target (compile everything)
 all: $(TARGET)

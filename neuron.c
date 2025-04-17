@@ -11,6 +11,12 @@ void* init_neuron(enum NeuronType type, double *neuron_params) {
         case FLIF:
             neuron = (FLIFNeuron *)init_FLIF(neuron_params);
             break;
+        case FLIF_Caputo:
+            neuron = (FLIFCaputoNeuron *)init_FLIF_Caputo(neuron_params);
+            break;
+        case FLIF_GL:
+            neuron = (FLIFGLNeuron *)init_FLIF_GL(neuron_params);
+            break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
     }
@@ -26,6 +32,12 @@ void update_neuron(void *neuron, enum NeuronType type, double input) {
         case FLIF:
             update_FLIF((FLIFNeuron *)neuron, input);
             break;
+        case FLIF_Caputo:
+            update_FLIF_Caputo((FLIFCaputoNeuron *)neuron, input);
+            break;
+        case FLIF_GL:
+            update_FLIF_GL((FLIFGLNeuron *)neuron, input);
+            break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
     }
@@ -39,6 +51,12 @@ double get_neuron_state(void *neuron, enum NeuronType type) {
             break;
         case FLIF:
             val = ((FLIFNeuron *)neuron)->V;
+            break;
+        case FLIF_Caputo:
+            val = ((FLIFCaputoNeuron *)neuron)->V;
+            break;
+        case FLIF_GL:
+            val = ((FLIFGLNeuron *)neuron)->V;
             break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
@@ -55,6 +73,12 @@ double get_neuron_spike(void *neuron, enum NeuronType type) {
         case FLIF:
             spike = ((FLIFNeuron*)neuron)->spike;
             break;
+        case FLIF_Caputo:
+            spike = ((FLIFCaputoNeuron *)neuron)->spike;
+            break;
+        case FLIF_GL:
+            spike = ((FLIFGLNeuron *)neuron)->spike;
+            break;
         default:
             fprintf(stderr, "Neuron type unavailable\n");
     }
@@ -69,6 +93,12 @@ void free_neuron(void *neuron, enum NeuronType type) {
             break;
         case FLIF:
             free_FLIF((FLIFNeuron*)neuron);
+            break;
+        case FLIF_Caputo:
+            free_FLIF_Caputo((FLIFCaputoNeuron*)neuron);
+            break;
+        case FLIF_GL:
+            free_FLIF_GL((FLIFGLNeuron*)neuron);
             break;
     }
     neuron = NULL;
