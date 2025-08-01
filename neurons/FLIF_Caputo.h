@@ -13,7 +13,7 @@ typedef struct {
 } FLIFCaputoNeuron;
 
 FLIFCaputoNeuron* init_FLIF_Caputo(double *params);
-void update_FLIF_Caputo(FLIFCaputoNeuron *neuron, double input);
+void update_FLIF_Caputo(FLIFCaputoNeuron *neuron, double input, double dt);
 void free_FLIF_Caputo(FLIFCaputoNeuron *neuron);
 
 #endif // FLIF_CAPUTO_H

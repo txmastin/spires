@@ -1,37 +1,33 @@
-# Compiler
+# Compiler and flags
 CC = clang
-
-# Compiler flags (-fsanitize=address currently removed for compatibility with gdb)
 CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -g
-
-# Linker flags
 LDFLAGS = -lm
 
-# Output executable name
+# Executable
 TARGET = reservoir_sim
 
-# Source files
-SRC = main.c neuron.c neurons/LIF.c neurons/FLIF.c neurons/FLIF_Caputo.c neurons/FLIF_GL.c reservoir.c math_utils.c
-OBJ = $(SRC:.c=.o)
+# Source files (automatically find all .c files)
+SRC := $(wildcard *.c) $(wildcard neurons/*.c)
+OBJ := $(SRC:.c=.o)
 
-# Header files (for dependencies)
-DEPS = neuron.h LIF.h FLIF.h FLIF_Caputo.h FLIF_GL.h reservoir.h math_utils.h math.h
+# Header paths for dependency generation
+INCLUDES := -I. -Ineurons
 
-# Default target (compile everything)
+# Default target
 all: $(TARGET)
 
 # Build the executable
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Compile .c files into .o object files
-%.o: %.c $(DEPS)
-	$(CC) $(CFLAGS) -c $< -o $@
+# Pattern rule to compile .c to .o
+%.o: %.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# Clean up compiled files
+# Clean target
 clean:
 	rm -f $(OBJ) $(TARGET)
 
-# Debugging: Print variables
+# Debug helper
 print-%: ; @echo $* = $($*)
 

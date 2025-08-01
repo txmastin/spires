@@ -27,19 +27,55 @@ FLIFGLNeuron* init_FLIF_GL(double *params) {
     n->mem_len = (Tmem > 0) ? (int)(Tmem / n->dt) : MAX_MEM_LEN;
     if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
 
-    n->DeltaM = calloc(n->mem_len - 1, sizeof(double));
-    n->coeffs = malloc((n->mem_len - 1) * sizeof(double));
+    n->DeltaM = calloc(n->mem_len, sizeof(double));
+    n->coeffs = malloc(n->mem_len * sizeof(double));
 
     n->coeffs[0] = 1.0;
     for (int i = 1; i < n->mem_len - 1; i++) {
         n->coeffs[i] = n->coeffs[i - 1] * (1.0 - (1.0 + n->alpha) / (double)i);
     }
 
-    n->kr = pow(n->dt, n->alpha);
     return n;
 }
 
-void update_FLIF_GL(FLIFGLNeuron *n, double input) {
+void update_FLIF_GL(FLIFGLNeuron *n, double input, double dt) {
+    if (n->spike == 1.0) n->spike = 0.0;
+
+    if (n->tprev > n->tref) {
+        int head = n->step % n->mem_len;
+        double frac_deriv = 0.0;
+        int limit = (n->step + 1 < n->mem_len) ? (n->step + 1) : n->mem_len;
+
+        // Include ALL terms k=0,1,2,... (this is correct)
+        for (int k = 0; k < limit; k++) {
+            int idx = (head - k + n->mem_len) % n->mem_len;
+            frac_deriv += n->coeffs[k] * n->DeltaM[idx];
+        }
+        frac_deriv *= pow(dt, -n->alpha);
+
+        double V_old = n->V;
+        double dV_dt = (-n->gl * (V_old - n->Vl) + input) / n->Cm;
+        n->V = V_old + dt * dV_dt - dt * frac_deriv;
+
+        // Store OLD voltage, not new voltage
+        n->DeltaM[head] = V_old;
+
+        if (n->V >= n->V_th) {
+            n->spike = 1.0;
+            n->V = n->V_0;
+            n->tprev = 0.0;
+        }
+    } else {
+        n->V = n->V_0;
+    }
+
+    n->tprev += dt;
+    n->step++;
+}
+
+
+/* OLD VERSION 
+void update_FLIF_GL(FLIFGLNeuron *n, double input, double dt) {
     if (n->spike == 1.0) n->spike = 0.0;
 
     if (n->tprev > n->tref) {
@@ -66,6 +102,7 @@ void update_FLIF_GL(FLIFGLNeuron *n, double input) {
     n->tprev += n->dt;
     n->step++;
 }
+*/
 
 void free_FLIF_GL(FLIFGLNeuron *n) {
     if (!n) return;

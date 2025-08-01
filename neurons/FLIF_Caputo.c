@@ -40,7 +40,7 @@ FLIFCaputoNeuron* init_FLIF_Caputo(double *params) {
     return n;
 }
 
-void update_FLIF_Caputo(FLIFCaputoNeuron *n, double input) {
+void update_FLIF_Caputo(FLIFCaputoNeuron *n, double input, double dt) {
     if (n->spike == 1.0) n->spike = 0.0;
 
     if (n->tprev > n->tref) {

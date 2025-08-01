@@ -2,108 +2,77 @@
 #include <stdlib.h>
 #include <math.h>
 #include "reservoir.h"
-#include "math_utils.h"
 
-void save_data(double *values, size_t length) {
-    FILE *file = fopen("../plotting/data.txt", "w");
-    if (!file) {
-        printf("Error opening file!\n");
-        return;
+// Generate a sine wave input
+void generate_sine_wave(double *buffer, size_t length, double freq, double sample_rate) {
+    for (size_t i = 0; i < length; i++) {
+        buffer[i] = sin(2.0 * M_PI * freq * i / sample_rate);
     }
-    
-    for (size_t i = 0; i <= length; i++) {
-        fprintf(file, "%lf\n", values[i]);
-    }
-    
-    fclose(file);
 }
-
 
 int main(void) {
-    size_t num_neurons = 24; 
-    size_t num_inputs = 24;
-    size_t num_outputs = 24;
-    double learning_rate = 0.0005;
-    double spectral_radius = 0.9;
-    double sparsity = 0.175;
+    // reservoir parameters 
+    size_t num_neurons = 32;
+    size_t num_inputs = 32;
+    size_t num_outputs = 32;
+    double lr = 0.001;
+    double rho = 0.9;
+    double ei_ratio = 0.8;
     double input_strength = 0.1;
-    enum ConnectivityType connectivity = DENSE;
+    double connectivity = 0.2;
+    double dt = 0.01;  
     enum NeuronType neuron_type = FLIF_GL;
-    
-    double Cm = 500.0;
-    double gl = 25.0;
-    double Vl = 0.0;
-    double Vth = 20.0;
-    double V0 = 0.0;
-    double Vpeak = 90.0;
-    double alpha = 0.6;
-    double tref = 5.0;
-    double Tmem = 2000.0;
-    double dt = 0.05;
-    double Iapp = 870.0;
-
-    // --- Param array ---
+    enum ConnectivityType connectivity_type = RANDOM;
+  
     double neuron_params[10] = {
-        Cm, gl, Vl, Vth, V0, Vpeak, alpha, tref, Tmem, dt
+    1.0,    // params[0]: Cm - Membrane capacitance (e.g., 1.0 nF)
+    0.05,   // params[1]: gl - Leak conductance (results in a 20ms time constant)
+    -65.0,  // params[2]: Vl - Resting/leak potential (mV)
+    -50.0,  // params[3]: V_th - Firing threshold (mV)
+    -65.0,  // params[4]: V_0 / Vreset - Reset potential (mV)
+    30.0,   // params[5]: Vpeak - Spike peak for visualization (mV)
+    0.85,   // params[6]: alpha - Fractional order (0 < alpha <= 1)
+    3.0,    // params[7]: tref - Refractory period (ms)
+    150.0,  // params[8]: Tmem - Memory duration for fractional derivative (ms)
+    dt     // params[9]: dt - Simulation time step (ms)
     };
 
-    struct Reservoir *reservoir = create_reservoir(num_neurons, num_inputs, num_outputs, learning_rate, spectral_radius, sparsity, input_strength, connectivity, neuron_type, neuron_params);
-    
-    if (!reservoir) {
-        fprintf(stderr, "Error: Failed to create reservoir\n");
-        return EXIT_FAILURE;
-    }
+    // neuron parameters
+    // Create reservoir
+    struct Reservoir *res = create_reservoir(num_neurons, num_inputs, num_outputs, lr, rho, ei_ratio, input_strength, connectivity, dt, connectivity_type, neuron_type, neuron_params);
+    init_weights(res);
+    rescale_weights(res);
+    randomize_output_layer(res);
 
-    printf("Reservoir created successfully with %zu neurons.\n", num_neurons);
-    
-    int init_err = init_weights(reservoir); 
-    if(!init_err) { printf("Weights initialized successfully\n");}
-    
-    rescale_matrix(reservoir->W, reservoir->num_neurons, reservoir->spectral_radius);
- 
-    double spec_radius = calc_spectral_radius(reservoir->W, reservoir->num_neurons);
+    // Generate input sine wave
+    size_t timesteps = 100;
+    double freq = 0.05;
+    double sample_rate = 1.0;  // matches dt
+    double input_series[timesteps];
 
-    printf("Spectral Radius:\t%lf\n", spec_radius);
-  
-    // Create test inputs
-    size_t input_length = 1000; 
-    double inputs[input_length];
-    for (size_t i = 0; i < input_length; i++) {
-        inputs[i] = sin(i)+1;  
-    }
+    generate_sine_wave(input_series, timesteps, freq, sample_rate);
 
-    double reservoir_output;
- 
-    size_t num_epochs = 100;
+    size_t num_epochs = 1000;
     double *acc_trace = malloc(num_epochs * sizeof(double));
+
     for (size_t epoch = 0; epoch < num_epochs; epoch++) {
         double avg_err = 0.0;
-        for (size_t i = 0; i < input_length; i++) { 
-            step_reservoir(reservoir, inputs[i]);
-            train_output_layer(reservoir, inputs[i]);
-            reservoir_output = compute_output(reservoir);
-            double error = inputs[i] - reservoir_output;
+        for (size_t i = 0; i < timesteps; i++) {
+            step_reservoir(res, input_series[i]);
+            train_output_iteratively(res, input_series[i]);
+            double reservoir_output = compute_output(res);
+            double error = input_series[i] - reservoir_output;
             avg_err += fabs(error);
         }
-        avg_err /= input_length;
+        avg_err /= timesteps;
         acc_trace[epoch] = avg_err;
         printf("%f\n", avg_err);
-    } 
-
-    save_data(acc_trace, num_epochs);
-    
-    // Free memory
-    free_reservoir(reservoir);
-    reservoir = NULL;
-    // Check if memory was successfully freed
-    if (reservoir == NULL) {
-        printf("Reservoir successfully freed.\n");
-    } else {
-        printf("Warning: Reservoir was not properly freed.\n");
     }
 
-    printf("Successfull reached end of program.\n");
-    
-    return EXIT_SUCCESS;
-}
+    free(acc_trace);
 
+
+    // Cleanup
+    free_reservoir(res);
+    return 0;
+}
