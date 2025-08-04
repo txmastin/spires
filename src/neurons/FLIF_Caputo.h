@@ -1,7 +1,7 @@
 #ifndef FLIF_CAPUTO_H
 #define FLIF_CAPUTO_H
 
-#define MAX_MEM_LEN 10000
+#define MAX_MEM_LEN 20000
 
 typedef struct {
     double V, V_th, V_0, spike;

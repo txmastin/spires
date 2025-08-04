@@ -6,7 +6,7 @@
 
 struct Reservoir* create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs, 
-    double learning_rate, double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
+    double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
     enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params) {
 
     struct Reservoir *reservoir = malloc(sizeof(*reservoir));
@@ -18,7 +18,6 @@ struct Reservoir* create_reservoir(
     reservoir->num_neurons = num_neurons;
     reservoir->num_inputs = num_inputs;
     reservoir->num_outputs = num_outputs;
-    reservoir->learning_rate = learning_rate;
     reservoir->spectral_radius = spectral_radius;
     reservoir->ei_ratio = ei_ratio;
     reservoir->input_strength = input_strength;
@@ -26,6 +25,7 @@ struct Reservoir* create_reservoir(
     reservoir->dt = dt;
     reservoir->connectivity_type = connectivity_type;
     reservoir->neuron_type = neuron_type;
+    reservoir->neuron_params = neuron_params;
     
     reservoir->neurons = (void**)malloc(num_neurons * sizeof(void*));
     
@@ -60,6 +60,21 @@ void step_reservoir(struct Reservoir *r, double input) {
 }
 */
 
+double *run_reservoir(struct Reservoir *r, double *input_series, size_t input_length) {
+    if (!r || r->dt <= 0) return NULL;
+    double *reservoir_outputs = malloc(input_length * sizeof(double));
+    if (reservoir_outputs == NULL) {
+        fprintf(stderr, "Error intializing memory for reservoir outputs!");
+        return NULL;
+    }
+
+    for (size_t i = 0; i < input_length; i ++) {
+        step_reservoir(r, input_series[i]);
+        reservoir_outputs[i] = compute_output(r);
+    }
+
+    return reservoir_outputs;    
+}
 
 void step_reservoir(struct Reservoir *r, double input) {
     if (!r || r->dt <= 0) return;
@@ -105,27 +120,6 @@ void step_reservoir(struct Reservoir *r, double input) {
     }
 }
 
-/****** OLD VERSION ******/
-/*
-void step_reservoir(struct Reservoir *reservoir, double input) {
-    for (size_t i = 0; i < reservoir->num_neurons; i++) {
-        double neuron_input = input * reservoir->W_in[i] * reservoir->input_strength;
-        for (size_t j = 0; j < reservoir->num_neurons; j++) {
-            // add inputs from other spiking neurons
-            neuron_input += get_neuron_spike(reservoir->neurons[j], reservoir->neuron_type) * reservoir->W[i * reservoir->num_neurons + j];
-        } 
-        update_neuron(reservoir->neurons[i], reservoir->neuron_type, neuron_input);
-    }
-}
-
-void run_reservoir(struct Reservoir *reservoir, double *inputs, size_t input_length) {
-    for (size_t i = 0; i < input_length; i++) {
-        double input = inputs[i]; 
-        step_reservoir(reservoir, input); 
-    }
-}
-*/
-
 
 // compute_output calculates the sum of neuron states * W_out
 double compute_output(struct Reservoir *reservoir) {
@@ -162,7 +156,7 @@ double *read_reservoir_state(struct Reservoir *reservoir) {
     return state; // caller will need to free()
 }
 
-void train_output_iteratively(struct Reservoir *reservoir, double target) {
+void train_output_iteratively(struct Reservoir *reservoir, double target, double lr) {
     double *state = read_reservoir_state(reservoir); // malloc'd in function, free here
     if (state == NULL) { return; }
     double prediction = compute_output(reservoir);
@@ -170,7 +164,7 @@ void train_output_iteratively(struct Reservoir *reservoir, double target) {
 
     // update W_out
     for (size_t i =0; i < reservoir->num_neurons; i++) {
-        reservoir->W_out[i] += state[i] * error * reservoir->learning_rate;
+        reservoir->W_out[i] += state[i] * error * lr;
     }
 
     free(state);
@@ -294,4 +288,83 @@ int randomize_output_layer(struct Reservoir *reservoir) {
         reservoir->W_out[i] = generate_weight(ei_ratio);
     }
     return EXIT_SUCCESS;
+}
+
+void train_output_ridge_regression(struct Reservoir *reservoir, double *input_series, double *target_series, size_t series_length, double lambda) {
+    size_t num_neurons = reservoir->num_neurons;
+
+    // --- Step 1: Collect reservoir states (X) over the entire series ---
+    // The matrix X will be (series_length x num_neurons)
+    double *X = malloc(series_length * num_neurons * sizeof(double));
+    if (!X) {
+        fprintf(stderr, "Failed to allocate memory for state matrix X.\n");
+        return;
+    }
+
+    // Run the reservoir and record the state of every neuron at every timestep
+    for (size_t t = 0; t < series_length; t++) {
+        step_reservoir(reservoir, input_series[t]);
+        double *current_state = read_reservoir_state(reservoir);
+        for (size_t n = 0; n < num_neurons; n++) {
+            X[t * num_neurons + n] = current_state[n];
+        }
+        free(current_state);
+    }
+
+    // --- Step 2: Construct the matrices for the normal equation A*W = B ---
+    // A = X'X + lambda*I  (size: num_neurons x num_neurons)
+    // B = X'Y             (size: num_neurons x 1)
+
+    double *X_T = malloc(num_neurons * series_length * sizeof(double));
+    double *A = malloc(num_neurons * num_neurons * sizeof(double));
+    double *B = malloc(num_neurons * sizeof(double));
+    if (!X_T || !A || !B) {
+        fprintf(stderr, "Failed to allocate memory for regression matrices.\n");
+        free(X); free(X_T); free(A); free(B);
+        return;
+    }
+
+    // Calculate X_T (transpose of X)
+    mat_transpose(X, X_T, series_length, num_neurons);
+
+    // Calculate A = X_T * X
+    mat_mat_mult(X_T, X, A, num_neurons, series_length, num_neurons);
+
+    // Add the ridge term: A = A + lambda * I
+    for (size_t i = 0; i < num_neurons; i++) {
+        A[i * num_neurons + i] += lambda;
+    }
+
+    // Calculate B = X_T * Y (where Y is the target_series)
+    for (size_t i = 0; i < num_neurons; i++) {
+        B[i] = 0.0;
+        for (size_t j = 0; j < series_length; j++) {
+            B[i] += X_T[i * series_length + j] * target_series[j];
+        }
+    }
+
+    // --- Step 3: Solve the system A * W_out = B for W_out ---
+    // The solution will be stored directly in the reservoir's W_out.
+    int status = solve_linear_system_lud(A, B, reservoir->W_out, num_neurons);
+    if (status != 0) {
+        fprintf(stderr, "Ridge regression failed. The system may be ill-conditioned.\n");
+    }
+
+    // --- Step 4: Cleanup ---
+    free(X);
+    free(X_T);
+    free(A);
+    free(B);
+}
+
+// Function to reset neurons in reservoir (helpful for fractional order neuron models)
+void reset_reservoir(struct Reservoir *reservoir) {
+    if (reservoir == NULL) {
+        fprintf(stderr, "Error resetting reservoir. Reservoir not initialized!");
+    }
+
+    for (size_t i = 0; i < reservoir->num_neurons; i++) {
+        free_neuron(reservoir->neurons[i], reservoir->neuron_type);
+        reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params);
+    }
 }
