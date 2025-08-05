@@ -24,6 +24,9 @@ SRC_OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o, \
            $(patsubst $(NEURON_DIR)/%.c,$(BUILD_DIR)/neurons/%.o, \
              $(filter $(NEURON_DIR)/%.c,$(SRC)))
 
+# All source objects except main.o (to use for tests linking)
+SRC_OBJ_NO_MAIN := $(filter-out $(BUILD_DIR)/main.o, $(SRC_OBJ))
+
 TEST_OBJ := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SRC))
 
 # Final test executables (each test becomes its own binary)
@@ -32,6 +35,7 @@ TEST_BINS := $(patsubst $(TEST_DIR)/%.c,$(BIN_DIR)/%,$(TEST_SRC))
 # Default target
 all: $(TARGET) tests
 
+# Build just src
 src: $(TARGET)
 
 # Link main binary
@@ -40,7 +44,7 @@ $(TARGET): $(SRC_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Link each test binary
-$(BIN_DIR)/%: $(BUILD_DIR)/tests/%.o $(SRC_OBJ)
+$(BIN_DIR)/%: $(BUILD_DIR)/tests/%.o $(SRC_OBJ_NO_MAIN)
 	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 

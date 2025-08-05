@@ -78,7 +78,7 @@ void run_single_neuron_integration_test(double* neuron_params, double input_curr
 }
 
 
-int test_neuron(void) {
+int main(void) {
     printf("=====================================================\n");
     printf("  Integration Test for FLIF_GL in Reservoir System   \n");
     printf("=====================================================\n");

@@ -4,7 +4,7 @@
 #include "reservoir.h"
 #include "math_utils.h"
 
-struct Reservoir* create_reservoir(
+struct Reservoir *create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs, 
     double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
     enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params) {
@@ -42,6 +42,16 @@ struct Reservoir* create_reservoir(
     return reservoir;
 }
 
+int init_reservoir(struct Reservoir *r) {
+    if (r == NULL) {
+        fprintf(stderr, "Error initializing reservoir. Reservoir not created!");
+        return EXIT_FAILURE;
+    }
+    init_weights(r);
+    rescale_weights(r);
+    randomize_output_layer(r);
+    return EXIT_SUCCESS;
+}
 
 // todo break inputs off to send only to 'num_inputs' neurons
 

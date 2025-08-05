@@ -87,7 +87,7 @@ int main(void) {
 
     // Generate chaotic mackey-glass signal
     // Parameters for chaotic behavior
-    size_t timesteps = 50;
+    size_t timesteps = 100;
     double x0 = 0.1;
     double tau = 20; // Must be > 17 for chaos
     double beta = 0.2;
@@ -153,10 +153,7 @@ int main(void) {
     
     // Create reservoir
     struct Reservoir *res = create_reservoir(num_neurons, num_inputs, num_outputs, rho, ei_ratio, input_strength, connectivity, dt, connectivity_type, neuron_type, neuron_params);
-    init_weights(res);
-    rescale_weights(res);
-    randomize_output_layer(res);
-    
+    init_reservoir(res); 
     // run training and inferencing
     train_output_ridge_regression(res, input_series, target_series, series_length, lambda); 
     reset_reservoir(res); // necessary for fractional neurons 

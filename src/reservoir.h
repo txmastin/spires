@@ -40,6 +40,7 @@ void free_reservoir(struct Reservoir *reservoir);
 int init_weights(struct Reservoir *reservoir);
 int randomize_output_layer(struct Reservoir *reservoir);
 int rescale_weights(struct Reservoir *reservoir);
+int init_reservoir(struct Reservoir *reservoir);
 double *read_reservoir_state(struct Reservoir *reservoir);
 void train_output_iteratively(struct Reservoir *reservoir, double target, double lr);
 void train_output_ridge_regression(struct Reservoir *reservoir, double *input_series, double *target_series, size_t series_length, double lambda);
