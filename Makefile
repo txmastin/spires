@@ -1,17 +1,69 @@
-# Compiler and flags
-CC = clang
-CFLAGS = -Isrc -Wall -g  # -Isrc is the include path, -Wall shows warnings, -g adds debug info
-LDFLAGS = -lm            # Linker flags for the math library
+# Paths
+SRC_DIR := src
+NEURON_DIR := $(SRC_DIR)/neurons
+TEST_DIR := tests
+BUILD_DIR := build
+BIN_DIR := bin
 
-# Source files for the library
-LIB_SRCS = src/reservoir.c src/neuron.c src/math_utils.c src/neurons/FLIF_GL.c src/neurons/LIF_Discrete.c src/neurons/LIF_Bio.c src/neurons/FLIF.c src/neurons/FLIF_Caputo.c 
-# Rule to build the integration test
-test_system: tests/test_neuron.c $(LIB_SRCS)
+# Tools
+CC := clang
+CFLAGS := -Wall -Wextra -Wpedantic -Wshadow -g
+LDFLAGS := -lm
+INCLUDES := -I$(SRC_DIR) -I$(NEURON_DIR)
+
+# Executable target
+TARGET := $(BIN_DIR)/run_simulation
+
+# Source files
+SRC := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(NEURON_DIR)/*.c)
+TEST_SRC := $(wildcard $(TEST_DIR)/*.c)
+
+# Object files
+SRC_OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o, \
+             $(filter $(SRC_DIR)/%.c,$(SRC))) \
+           $(patsubst $(NEURON_DIR)/%.c,$(BUILD_DIR)/neurons/%.o, \
+             $(filter $(NEURON_DIR)/%.c,$(SRC)))
+
+TEST_OBJ := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SRC))
+
+# Final test executables (each test becomes its own binary)
+TEST_BINS := $(patsubst $(TEST_DIR)/%.c,$(BIN_DIR)/%,$(TEST_SRC))
+
+# Default target
+all: $(TARGET) tests
+
+src: $(TARGET)
+
+# Link main binary
+$(TARGET): $(SRC_OBJ)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Link each test binary
+$(BIN_DIR)/%: $(BUILD_DIR)/tests/%.o $(SRC_OBJ)
+	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-# '$^' means "all the prerequisites" (the .c files)
-# '$@' means "the target" (the file name 'test_system')
+# Compile rules
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# Rule to clean up compiled files
+$(BUILD_DIR)/neurons/%.o: $(NEURON_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Build all test binaries
+tests: $(TEST_BINS)
+
+# Clean build artifacts
 clean:
-	rm -f test_system
+	rm -rf $(BUILD_DIR) $(BIN_DIR)
+
+# Debug helper
+print-%: ; @echo $* = $($*)
+

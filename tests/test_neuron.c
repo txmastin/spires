@@ -20,7 +20,6 @@ void run_single_neuron_integration_test(double* neuron_params, double input_curr
     double dt = neuron_params[5]; // dt must match the neuron's internal dt
 
     // These parameters are disabled or set to neutral values for a single neuron test
-    double learning_rate = 0.0;
     double spectral_radius = 0.0; // No recurrent connections
     double connectivity = 0.0;    // No recurrent connections
     double input_strength = 1.0;  // Pass input through without scaling
@@ -30,7 +29,6 @@ void run_single_neuron_integration_test(double* neuron_params, double input_curr
         num_neurons,
         num_neurons, // num_inputs
         num_neurons, // num_outputs
-        learning_rate,
         spectral_radius,
         0.8, // ei_ratio (not relevant for single neuron)
         input_strength,
@@ -80,7 +78,7 @@ void run_single_neuron_integration_test(double* neuron_params, double input_curr
 }
 
 
-int main() {
+int test_neuron(void) {
     printf("=====================================================\n");
     printf("  Integration Test for FLIF_GL in Reservoir System   \n");
     printf("=====================================================\n");

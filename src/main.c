@@ -13,36 +13,108 @@ void generate_noisy_sine_wave(double *buffer, size_t length, double freq, double
     }
 }
 
+void generate_mackey_glass(double *buffer, size_t length, double x0, double tau, double beta, double gamma, int n) {
+    double mg_dt = 1.0;
+    // Calculate the required length of the history buffer in discrete steps
+    int history_len = (int)ceil(tau / mg_dt);
+
+    // Allocate and initialize the history buffer
+    double *history = (double *)malloc(history_len * sizeof(double));
+    if (history == NULL) {
+        fprintf(stderr, "Error: Failed to allocate memory for Mackey-Glass history.\n");
+        return;
+    }
+    for (int i = 0; i < history_len; i++) {
+        history[i] = x0;
+    }
+
+    // Set the first point of the output buffer
+    buffer[0] = x0;
+    double x_t = x0; // Current value of x
+
+    // Main simulation loop to generate the series with 4th order runge-kutta method
+    for (size_t i = 0; i < length - 1; i++) {
+        // Get the delayed value x(t - tau) from the history buffer
+        double x_tau = history[i % history_len];
+
+        // k1: slope at the beginning of the interval
+        double k1 = mg_dt * (beta * x_tau / (1.0 + pow(x_tau, n)) - gamma * x_t);
+
+        // k2: slope at the midpoint, using k1
+        x_tau = history[(i + history_len / 2) % history_len]; // Approx. delay for midpoint
+        double k2 = mg_dt * (beta * x_tau / (1.0 + pow(x_tau, n)) - gamma * (x_t + 0.5 * k1));
+
+        // k3: slope at the midpoint, using k2
+        double k3 = mg_dt * (beta * x_tau / (1.0 + pow(x_tau, n)) - gamma * (x_t + 0.5 * k2));
+
+        // k4: slope at the end of the interval, using k3
+        x_tau = history[(i + 1) % history_len]; // Approx. delay for endpoint
+        double k4 = mg_dt * (beta * x_tau / (1.0 + pow(x_tau, n)) - gamma * (x_t + k3));
+
+        // Update the current value using the weighted average of the slopes
+        x_t += (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
+
+        // Store the new value in the history buffer (for future delayed lookups)
+        history[(i + 1) % history_len] = x_t;
+
+        // Store the new value in the output buffer
+        buffer[i + 1] = x_t;
+    }
+
+    // Cleanup
+    free(history);
+}
+
 int main(void) {
     srand(time(NULL));
-    FILE *output_file = fopen("output_signals.dat", "w");
+    FILE *output_file = fopen("data/output_signals.dat", "w");
 
     if (output_file == NULL) {
         fprintf(stderr, "Error: Could not open data files for writing.\n");
         return 1;
     }
-
+    
+    /*
     // Generate input sine wave
     size_t timesteps = 50;
     double freq = 0.05;
     double sample_rate = 1.0;  
-    double input_series[timesteps];
-    double noise_gain = 0.0;
+    double *input_series = malloc(timesteps * sizeof(double);
+    double noise_gain = 3.0;
 
     generate_noisy_sine_wave(input_series, timesteps, freq, sample_rate, noise_gain);
+    */
+
+    // Generate chaotic mackey-glass signal
+    // Parameters for chaotic behavior
+    size_t timesteps = 50;
+    double x0 = 0.1;
+    double tau = 20; // Must be > 17 for chaos
+    double beta = 0.2;
+    double gamma = 0.1;
+    int n = 10;
+
+    // Allocate buffer for the output
+    double *input_series = (double *)malloc(timesteps * sizeof(double));
+    if (input_series == NULL) {
+        return 1;
+    }
+
+    // Generate the series
+    generate_mackey_glass(input_series, timesteps, x0, tau, beta, gamma, n);
 
     double *target_series = input_series;
     double series_length = timesteps;
-    double lambda = 0.1;
+    double lambda = 0.01;
     
     // reservoir parameters 
-    size_t num_neurons = 32;
-    size_t num_inputs = 32;
-    size_t num_outputs = 32;
+    size_t num_neurons = 200;
+    size_t num_inputs = 200;
+    size_t num_outputs = 200;
     double rho = 0.9;
     double ei_ratio = 0.8;
     double input_strength = 1.0;
-    double connectivity = 0.2;
+    double connectivity = 0.1;
     double dt = 0.01;
     enum NeuronType neuron_type = FLIF_GL;
     enum ConnectivityType connectivity_type = RANDOM;
@@ -53,10 +125,10 @@ int main(void) {
         0.0,    // params[1]: V_reset
         0.0,    // params[2]: V_rest
         20.0,   // params[3]: tau_m
-        0.8,    // params[4]: alpha
+        0.4,    // params[4]: alpha
         dt,     // params[5]: dt
         timesteps,   // params[6]: Tmem
-        0.0
+        0.25     // params[7]: bias
     };
 
    double discrete_neuron_params[] = {
