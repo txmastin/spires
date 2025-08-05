@@ -1,0 +1,7 @@
+# Ignore build output directories
+build/
+bin/
+
+# Ignore object files and dependency files
+*.o
+*.d
