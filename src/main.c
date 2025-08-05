@@ -5,7 +5,8 @@
 #include "reservoir.h"
 
 
-void generate_noisy_sine_wave(double *buffer, size_t length, double freq, double sample_rate, double noise_gain) {
+void generate_noisy_sine_wave(double *buffer, size_t length, double freq, double sample_rate, double noise_gain) 
+{
     for (size_t i = 0; i < length; i++) {
         double clean_signal = sin(2.0 * M_PI * freq * i / sample_rate);
         double noise = (noise_gain * rand() / RAND_MAX) - (noise_gain / 2.0);
@@ -13,13 +14,14 @@ void generate_noisy_sine_wave(double *buffer, size_t length, double freq, double
     }
 }
 
-void generate_mackey_glass(double *buffer, size_t length, double x0, double tau, double beta, double gamma, int n) {
+void generate_mackey_glass(double *buffer, size_t length, double x0, double tau, double beta, double gamma, int n) 
+{
     double mg_dt = 1.0;
     // Calculate the required length of the history buffer in discrete steps
     int history_len = (int)ceil(tau / mg_dt);
 
     // Allocate and initialize the history buffer
-    double *history = (double *)malloc(history_len * sizeof(double));
+    double *history = malloc(history_len * sizeof(double));
     if (history == NULL) {
         fprintf(stderr, "Error: Failed to allocate memory for Mackey-Glass history.\n");
         return;
@@ -28,11 +30,9 @@ void generate_mackey_glass(double *buffer, size_t length, double x0, double tau,
         history[i] = x0;
     }
 
-    // Set the first point of the output buffer
     buffer[0] = x0;
     double x_t = x0; // Current value of x
 
-    // Main simulation loop to generate the series with 4th order runge-kutta method
     for (size_t i = 0; i < length - 1; i++) {
         // Get the delayed value x(t - tau) from the history buffer
         double x_tau = history[i % history_len];
@@ -61,11 +61,11 @@ void generate_mackey_glass(double *buffer, size_t length, double x0, double tau,
         buffer[i + 1] = x_t;
     }
 
-    // Cleanup
     free(history);
 }
 
-int main(void) {
+int main(void) 
+{
     srand(time(NULL));
     FILE *output_file = fopen("data/output_signals.dat", "w");
 
@@ -95,7 +95,7 @@ int main(void) {
     int n = 10;
 
     // Allocate buffer for the output
-    double *input_series = (double *)malloc(timesteps * sizeof(double));
+    double *input_series = malloc(timesteps * sizeof(double));
     if (input_series == NULL) {
         return 1;
     }
@@ -116,8 +116,8 @@ int main(void) {
     double input_strength = 1.0;
     double connectivity = 0.1;
     double dt = 0.01;
-    enum NeuronType neuron_type = FLIF_GL;
-    enum ConnectivityType connectivity_type = RANDOM;
+    enum neuron_type neuron_type = LIF_DISCRETE;
+    enum connectivity_type connectivity_type = RANDOM;
  
     // neuron parameters
     double fractional_neuron_params[] = {
@@ -135,10 +135,11 @@ int main(void) {
         0.0, // params[0]: V_0
         1.0, // params[1]: V_th
         0.2, // params[2]: leak_rate
+        0.05 // params[3]: bias
     };
     
     double *neuron_params = NULL;
-    switch(neuron_type){
+    switch(neuron_type) {
         case LIF_DISCRETE:
             neuron_params = discrete_neuron_params;
             break;
@@ -146,13 +147,13 @@ int main(void) {
             neuron_params = fractional_neuron_params;
             break;
         default:
-            fprintf(stderr, "Error: Could not initialize neuron parameters, neuron type unavailable");
+            fprintf(stderr, "Error: Could not initialize neuron parameters, neuron type unavailable.\n");
             break;
     };
             
     
     // Create reservoir
-    struct Reservoir *res = create_reservoir(num_neurons, num_inputs, num_outputs, rho, ei_ratio, input_strength, connectivity, dt, connectivity_type, neuron_type, neuron_params);
+    struct reservoir *res = create_reservoir(num_neurons, num_inputs, num_outputs, rho, ei_ratio, input_strength, connectivity, dt, connectivity_type, neuron_type, neuron_params);
     init_reservoir(res); 
     // run training and inferencing
     train_output_ridge_regression(res, input_series, target_series, series_length, lambda); 
@@ -165,7 +166,6 @@ int main(void) {
         fprintf(output_file, "%zu %f %f\n", i, target_series[i], reservoir_outputs[i]);
     }
 
-    // Cleanup
     free_reservoir(res);
     fclose(output_file);
 

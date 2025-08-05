@@ -1,8 +1,9 @@
 #include <stdlib.h>
-#include "LIF_Bio.h"
+#include "lif_bio.h"
 
-LIFBioNeuron* init_LIF_Bio(double *neuron_params) {
-    LIFBioNeuron *n = malloc(sizeof(LIFBioNeuron));
+struct lif_bio_neuron* init_lif_bio(double *neuron_params) 
+{
+    struct lif_bio_neuron *n = malloc(sizeof(struct lif_bio_neuron));
     n->V_0  = neuron_params[0];  // reset voltage 
     n->V_th   = neuron_params[1];  // threshold
     n->tau   = neuron_params[2];  // membrane time constant
@@ -12,7 +13,8 @@ LIFBioNeuron* init_LIF_Bio(double *neuron_params) {
     return n;
 }
 
-void update_LIF_Bio(LIFBioNeuron *n, double input, double dt) {
+void update_lif_bio(struct lif_bio_neuron *n, double input, double dt) 
+{
     if (n->spike == 1.0) {
         n->spike = 0.0;
     }
@@ -26,7 +28,8 @@ void update_LIF_Bio(LIFBioNeuron *n, double input, double dt) {
     }
 }
 
-void free_LIF_Bio(LIFBioNeuron *n) {
+void free_lif_bio(struct lif_bio_neuron *n) 
+{
     free(n);
 }
 

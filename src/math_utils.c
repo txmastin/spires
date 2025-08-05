@@ -4,7 +4,8 @@
 #include <math.h>
 
 // Matrix-vector multiplication: y = A * x
-void mat_vec_mult(double *A, double *x, double *y, size_t n) {
+void mat_vec_mult(double *A, double *x, double *y, size_t n) 
+{
     for (size_t i = 0; i < n; i++) {
         y[i] = 0.0;
         for (size_t j = 0; j < n; j++) {
@@ -14,13 +15,14 @@ void mat_vec_mult(double *A, double *x, double *y, size_t n) {
 }
 
 // Power Iteration to estimate spectral radius
-double calc_spectral_radius(double *A, size_t n) {
+double calc_spectral_radius(double *A, size_t n) 
+{
 
     const unsigned int MAX_ITER = 1000;
     const double TOLERANCE = 1e-6;
  
-    double* x = (double *)malloc(n * sizeof(double));
-    double* y = (double *)malloc(n * sizeof(double));
+    double* x = malloc(n * sizeof(double));
+    double* y = malloc(n * sizeof(double));
 
     // Initialize x with 1s
     for (size_t i = 0; i < n; i++) x[i] = 1.0;
@@ -52,7 +54,8 @@ double calc_spectral_radius(double *A, size_t n) {
     return lambda_new;
 }
 
-void rescale_matrix(double* A, size_t n, double target_rho) {
+void rescale_matrix(double* A, size_t n, double target_rho) 
+{
     double rho = calc_spectral_radius(A, n);
     double rescale_factor = target_rho / rho;
 
@@ -68,7 +71,8 @@ void rescale_matrix(double* A, size_t n, double target_rho) {
  * @param A The input matrix (rows x cols).
  * @param A_T The output transposed matrix (cols x rows).
  */
-void mat_transpose(double *A, double *A_T, size_t rows, size_t cols) {
+void mat_transpose(double *A, double *A_T, size_t rows, size_t cols) 
+{
     for (size_t i = 0; i < rows; i++) {
         for (size_t j = 0; j < cols; j++) {
             A_T[j * rows + i] = A[i * cols + j];
@@ -82,7 +86,8 @@ void mat_transpose(double *A, double *A_T, size_t rows, size_t cols) {
  * @param B Input matrix of size (c1 x c2).
  * @param C Output matrix of size (r1 x c2).
  */
-void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t c2) {
+void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t c2) 
+{
     for (size_t i = 0; i < r1; i++) {
         for (size_t j = 0; j < c2; j++) {
             C[i * c2 + j] = 0.0;
@@ -104,7 +109,8 @@ void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t 
  * @param n The size of the system.
  * @return 0 on success, -1 on failure (e.g., singular matrix).
  */
-int solve_linear_system_lud(double *A, double *b, double *x, size_t n) {
+int solve_linear_system_lud(double *A, double *b, double *x, size_t n) 
+{
     // --- Step 1: LU Decomposition (Doolittle's method) ---
     for (size_t i = 0; i < n; i++) {
         // Upper Triangle
@@ -152,5 +158,5 @@ int solve_linear_system_lud(double *A, double *b, double *x, size_t n) {
         x[i] = (y[i] - sum) / A[i * n + i];
     }
 
-    return EXIT_SUCCESS; // Success
+    return EXIT_SUCCESS; 
 }

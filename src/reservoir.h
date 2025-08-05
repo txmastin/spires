@@ -3,13 +3,13 @@
 
 #include "neuron.h"
 
-enum ConnectivityType {
+enum connectivity_type {
     RANDOM,
     SMALL_WORLD,
     SCALE_FREE
 };
 
-struct Reservoir {
+struct reservoir {
     void **neurons; 
     size_t num_neurons;
     size_t num_inputs;     // for now, default to num_neurons
@@ -22,28 +22,28 @@ struct Reservoir {
     double *W_in;
     double *W_out;
     double *W;
-    enum ConnectivityType connectivity_type;
-    enum NeuronType neuron_type;
+    enum connectivity_type connectivity_type;
+    enum neuron_type neuron_type;
     double *neuron_params;
 };
 
-struct Reservoir* create_reservoir(
+struct reservoir* create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs,
     double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
-    enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params);
+    enum connectivity_type connectivity_type, enum neuron_type neuron_type, double *neuron_params);
 
-double compute_output(struct Reservoir *reservoir);
-double compute_activity(struct Reservoir *reservoir);
-void step_reservoir(struct Reservoir *reservoir, double input);
-double *run_reservoir(struct Reservoir *reservoir, double *input_series, size_t input_length);
-void free_reservoir(struct Reservoir *reservoir);
-int init_weights(struct Reservoir *reservoir);
-int randomize_output_layer(struct Reservoir *reservoir);
-int rescale_weights(struct Reservoir *reservoir);
-int init_reservoir(struct Reservoir *reservoir);
-double *read_reservoir_state(struct Reservoir *reservoir);
-void train_output_iteratively(struct Reservoir *reservoir, double target, double lr);
-void train_output_ridge_regression(struct Reservoir *reservoir, double *input_series, double *target_series, size_t series_length, double lambda);
-void reset_reservoir(struct Reservoir *reservoir);
+double compute_output(struct reservoir *reservoir);
+double compute_activity(struct reservoir *reservoir);
+void step_reservoir(struct reservoir *reservoir, double input);
+double *run_reservoir(struct reservoir *reservoir, double *input_series, size_t input_length);
+void free_reservoir(struct reservoir *reservoir);
+int init_weights(struct reservoir *reservoir);
+int randomize_output_layer(struct reservoir *reservoir);
+int rescale_weights(struct reservoir *reservoir);
+int init_reservoir(struct reservoir *reservoir);
+double *read_reservoir_state(struct reservoir *reservoir);
+void train_output_iteratively(struct reservoir *reservoir, double target, double lr);
+void train_output_ridge_regression(struct reservoir *reservoir, double *input_series, double *target_series, size_t series_length, double lambda);
+void reset_reservoir(struct reservoir *reservoir);
 #endif // RESERVOIR_H
 

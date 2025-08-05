@@ -1,10 +1,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include "FLIF_GL.h"
+#include "flif_gl.h"
+
 
 // Helper function to compute the GL coefficients
-static void compute_gl_coeffs(double* coeffs_array, double alpha, int N) {
+static void compute_gl_coeffs(double* coeffs_array, double alpha, int N) 
+{
     if (!coeffs_array) return;
     coeffs_array[0] = 1.0;
     for (int k = 1; k < N; k++) {
@@ -12,9 +14,9 @@ static void compute_gl_coeffs(double* coeffs_array, double alpha, int N) {
     }
 }
 
-// init_FLIF_GL conforms to the existing `init_neuron` wrapper
-FLIFGLNeuron* init_FLIF_GL(double* params) {
-    FLIFGLNeuron* n = (FLIFGLNeuron*)malloc(sizeof(FLIFGLNeuron));
+struct flif_gl_neuron* init_flif_gl(double* params) 
+{
+    struct flif_gl_neuron* n = (struct flif_gl_neuron*)malloc(sizeof(struct flif_gl_neuron));
     if (!n) return NULL;
 
     // Map parameters from the array passed by main.c
@@ -25,7 +27,7 @@ FLIFGLNeuron* init_FLIF_GL(double* params) {
     n->tau_m  = params[3];
     n->alpha  = params[4];
     n->dt     = params[5]; // This is the micro-step dt from the reservoir
-    double Tmem = params[6]; // Memory duration in ms, from params
+    double T_mem = params[6]; // Memory duration in ms, from params
     n->bias = params[7];
 
     // Initialize internal state
@@ -34,7 +36,7 @@ FLIFGLNeuron* init_FLIF_GL(double* params) {
     n->spike = 0.0;
 
     // Setup the circular history buffer based on memory duration and micro-step dt
-    n->mem_len = (Tmem > 0 && n->dt > 0) ? (int)(Tmem / n->dt) : 2000;
+    n->mem_len = (T_mem > 0 && n->dt > 0) ? (int)(T_mem / n->dt) : 2000;
     if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
 
     n->V_history = (double*)malloc(n->mem_len * sizeof(double));
@@ -51,8 +53,8 @@ FLIFGLNeuron* init_FLIF_GL(double* params) {
     return n;
 }
 
-// update_FLIF_GL conforms to the existing `update_neuron` wrapper signature
-void update_FLIF_GL(FLIFGLNeuron* n, double input, double dt) {
+void update_flif_gl(struct flif_gl_neuron* n, double input, double dt) 
+{
     // Reset spike from the previous micro-step
     if (n->spike == 1.0) n->spike = 0.0;
     
@@ -90,7 +92,8 @@ void update_FLIF_GL(FLIFGLNeuron* n, double input, double dt) {
     n->internal_step++;
 }
 
-void free_FLIF_GL(FLIFGLNeuron* n) {
+void free_flif_gl(struct flif_gl_neuron* n) 
+{
     if (!n) return;
     free(n->V_history);
     free(n->coeffs);

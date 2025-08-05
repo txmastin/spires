@@ -1,15 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+// #include "spires.h"
 #include "reservoir.h"
 #include "math_utils.h"
 
-struct Reservoir *create_reservoir(
-    size_t num_neurons, size_t num_inputs, size_t num_outputs, 
-    double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
-    enum ConnectivityType connectivity_type, enum NeuronType neuron_type, double *neuron_params) {
+struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t num_outputs, 
+                                double spectral_radius, double ei_ratio, double input_strength, 
+                                double connectivity, double dt, enum connectivity_type connectivity_type, 
+                                enum neuron_type neuron_type, double *neuron_params) 
+{
 
-    struct Reservoir *reservoir = malloc(sizeof(*reservoir));
+    struct reservoir *reservoir = malloc(sizeof(*reservoir));
     if (reservoir == NULL) {
         fprintf(stderr, "Error allocating memory for reservoir of size %zu\n", num_neurons);
         return NULL;
@@ -27,7 +29,7 @@ struct Reservoir *create_reservoir(
     reservoir->neuron_type = neuron_type;
     reservoir->neuron_params = neuron_params;
     
-    reservoir->neurons = (void**)malloc(num_neurons * sizeof(void*));
+    reservoir->neurons = malloc(num_neurons * sizeof(void*));
     
     if (!(reservoir->neurons)) {
         fprintf(stderr, "Memory allocation failed for reservoir neurons\n");
@@ -42,9 +44,10 @@ struct Reservoir *create_reservoir(
     return reservoir;
 }
 
-int init_reservoir(struct Reservoir *r) {
+int init_reservoir(struct reservoir *r) 
+{
     if (r == NULL) {
-        fprintf(stderr, "Error initializing reservoir. Reservoir not created!");
+        fprintf(stderr, "Error initializing reservoir. Reservoir not created!\n");
         return EXIT_FAILURE;
     }
     init_weights(r);
@@ -55,26 +58,16 @@ int init_reservoir(struct Reservoir *r) {
 
 // todo break inputs off to send only to 'num_inputs' neurons
 
-
-/* old version
-void step_reservoir(struct Reservoir *r, double input) {
-    for (size_t i = 0; i < r->num_neurons; i++) {
-        double neuron_input = input * r->W_in[i] * r->input_strength;
-
-        for (size_t j = 0; j < r->num_neurons; j++) {
-            neuron_input += get_neuron_spike(r->neurons[j], r->neuron_type) * r->W[i * r->num_neurons + j];
-        }
-
-        update_neuron(r->neurons[i], r->neuron_type, neuron_input, r->dt);
+double *run_reservoir(struct reservoir *r, double *input_series, size_t input_length) 
+{
+    if (!r || r->dt <= 0) {
+        fprintf(stderr, "Error running reservoir. Reservoir not initialized!\n");
+        return NULL;
     }
-}
-*/
 
-double *run_reservoir(struct Reservoir *r, double *input_series, size_t input_length) {
-    if (!r || r->dt <= 0) return NULL;
     double *reservoir_outputs = malloc(input_length * sizeof(double));
     if (reservoir_outputs == NULL) {
-        fprintf(stderr, "Error intializing memory for reservoir outputs!");
+        fprintf(stderr, "Error intializing memory for reservoir outputs!\n");
         return NULL;
     }
 
@@ -86,7 +79,8 @@ double *run_reservoir(struct Reservoir *r, double *input_series, size_t input_le
     return reservoir_outputs;    
 }
 
-void step_reservoir(struct Reservoir *r, double input) {
+void step_reservoir(struct reservoir *r, double input) 
+{
     if (!r || r->dt <= 0) return;
 
     // The macro step duration is implicitly 1.0.
@@ -132,7 +126,8 @@ void step_reservoir(struct Reservoir *r, double input) {
 
 
 // compute_output calculates the sum of neuron states * W_out
-double compute_output(struct Reservoir *reservoir) {
+double compute_output(struct reservoir *reservoir) 
+{
     double output = 0.0;
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         output += get_neuron_state(reservoir->neurons[i], reservoir->neuron_type) * reservoir->W_out[i];
@@ -142,7 +137,8 @@ double compute_output(struct Reservoir *reservoir) {
 }
 
 // compute_activity returns the sum of spikes
-double compute_activity(struct Reservoir *reservoir) {
+double compute_activity(struct reservoir *reservoir) 
+{
     double total_activity = 0.0;
     double spike; 
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
@@ -154,7 +150,8 @@ double compute_activity(struct Reservoir *reservoir) {
 }
 
 // return the neuron->V for each neuron
-double *read_reservoir_state(struct Reservoir *reservoir) {
+double *read_reservoir_state(struct reservoir *reservoir) 
+{
     double *state = malloc(reservoir->num_neurons * sizeof(double));
     if (state == NULL) {
         fprintf(stderr, "Memory allocation error for reservoir state\n");
@@ -166,7 +163,8 @@ double *read_reservoir_state(struct Reservoir *reservoir) {
     return state; // caller will need to free()
 }
 
-void train_output_iteratively(struct Reservoir *reservoir, double target, double lr) {
+void train_output_iteratively(struct reservoir *reservoir, double target, double lr) 
+{
     double *state = read_reservoir_state(reservoir); // malloc'd in function, free here
     if (state == NULL) { return; }
     double prediction = compute_output(reservoir);
@@ -180,14 +178,11 @@ void train_output_iteratively(struct Reservoir *reservoir, double target, double
     free(state);
 }
 
-void free_reservoir(struct Reservoir *reservoir) {
-    if (!reservoir) { return; }
-    
-    printf("Freeing reservoir at address: %p\n", (void*)reservoir);
-    printf("Freeing neurons at address: %p\n", (void*)reservoir->neurons);
-    printf("Freeing W_in at address: %p\n", (void*)reservoir->W_in);
-    printf("Freeing W_out at address: %p\n", (void*)reservoir->W_out);
-    printf("Freeing W at address: %p\n", (void*)reservoir->W);
+void free_reservoir(struct reservoir *reservoir) 
+{
+    if (!reservoir) { 
+        return;
+    }
 
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         free_neuron(reservoir->neurons[i], reservoir->neuron_type);
@@ -205,7 +200,8 @@ void free_reservoir(struct Reservoir *reservoir) {
 }
 
 
-double generate_weight(double ei_ratio) {
+double generate_weight(double ei_ratio) 
+{
     double magnitude = (double)rand() / RAND_MAX;
     if (((double)rand() / RAND_MAX) < ei_ratio) {
         return magnitude;
@@ -224,7 +220,8 @@ double generate_weight(double ei_ratio) {
  * of the main() application by calling srand(time(NULL)).
  */
 
-int init_weights(struct Reservoir *reservoir) {
+int init_weights(struct reservoir *reservoir) 
+{
     reservoir->W_in = malloc(reservoir->num_neurons * sizeof(double)); 
     if(reservoir->W_in == NULL) {
         fprintf(stderr, "Error allocating memory for W_in, size of reservoir: %zu\n", reservoir->num_neurons);
@@ -275,7 +272,8 @@ int init_weights(struct Reservoir *reservoir) {
     return EXIT_SUCCESS;
 }
 
-int rescale_weights(struct Reservoir *reservoir) {
+int rescale_weights(struct reservoir *reservoir) 
+{
     // rescale weights to ensure spectral radius
     double current_spectral_radius = calc_spectral_radius(reservoir->W, reservoir->num_neurons);
     if (current_spectral_radius > 1e-9) { // avoid division by zero
@@ -287,9 +285,10 @@ int rescale_weights(struct Reservoir *reservoir) {
     return EXIT_SUCCESS;
 }
 
-int randomize_output_layer(struct Reservoir *reservoir) {
+int randomize_output_layer(struct reservoir *reservoir) 
+{
     if (reservoir == NULL) {
-        fprintf(stderr, "Failed to randomize output weights. Reservoir not initialized!");
+        fprintf(stderr, "Failed to randomize output weights. Reservoir not initialized!\n");
         return EXIT_FAILURE;
     }
 
@@ -300,7 +299,9 @@ int randomize_output_layer(struct Reservoir *reservoir) {
     return EXIT_SUCCESS;
 }
 
-void train_output_ridge_regression(struct Reservoir *reservoir, double *input_series, double *target_series, size_t series_length, double lambda) {
+void train_output_ridge_regression(struct reservoir *reservoir, double *input_series, 
+    double *target_series, size_t series_length, double lambda) 
+{
     size_t num_neurons = reservoir->num_neurons;
 
     // --- Step 1: Collect reservoir states (X) over the entire series ---
@@ -368,9 +369,10 @@ void train_output_ridge_regression(struct Reservoir *reservoir, double *input_se
 }
 
 // Function to reset neurons in reservoir (helpful for fractional order neuron models)
-void reset_reservoir(struct Reservoir *reservoir) {
+void reset_reservoir(struct reservoir *reservoir) 
+{
     if (reservoir == NULL) {
-        fprintf(stderr, "Error resetting reservoir. Reservoir not initialized!");
+        fprintf(stderr, "Error resetting reservoir. Reservoir not initialized!\n");
     }
 
     for (size_t i = 0; i < reservoir->num_neurons; i++) {

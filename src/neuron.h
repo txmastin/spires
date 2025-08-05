@@ -1,26 +1,24 @@
 #ifndef NEURON_H
 #define NEURON_H
 
-#include "neurons/LIF_Discrete.h"
-#include "neurons/LIF_Bio.h"
-#include "neurons/FLIF.h"
-#include "neurons/FLIF_Caputo.h"
-#include "neurons/FLIF_GL.h"
+#include "neurons/lif_discrete.h"
+#include "neurons/lif_bio.h"
+#include "neurons/flif_caputo.h"
+#include "neurons/flif_gl.h"
 
 
-enum NeuronType {
+enum neuron_type {
     LIF_DISCRETE,
     LIF_BIO,
-    FLIF,
     FLIF_CAPUTO,
     FLIF_GL
 };
 
-void* init_neuron(enum NeuronType type, double *neuron_params);
-void update_neuron(void *neuron, enum NeuronType type, double input, double dt);
-void free_neuron(void *neuron, enum NeuronType type);
-double get_neuron_state(void *neuron, enum NeuronType type);
-double get_neuron_spike(void *neuron, enum NeuronType type);
+void* init_neuron(enum neuron_type type, double *neuron_params);
+void update_neuron(void *neuron, enum neuron_type type, double input, double dt);
+void free_neuron(void *neuron, enum neuron_type type);
+double get_neuron_state(void *neuron, enum neuron_type type);
+double get_neuron_spike(void *neuron, enum neuron_type type);
 
 #endif // NEURON_H
 

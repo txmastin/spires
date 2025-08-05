@@ -25,7 +25,7 @@ void run_single_neuron_integration_test(double* neuron_params, double input_curr
     double input_strength = 1.0;  // Pass input through without scaling
 
     // Create the reservoir with our single FLIF_GL neuron
-    struct Reservoir *res = create_reservoir(
+    struct reservoir *res = create_reservoir(
         num_neurons,
         num_neurons, // num_inputs
         num_neurons, // num_outputs
