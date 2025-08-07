@@ -7,9 +7,11 @@ BIN_DIR := bin
 
 # Tools
 CC := clang
-CFLAGS := -Wall -Wextra -Wpedantic -Wshadow -g
+CFLAGS := -O2 -Wall -Wextra -Wpedantic -Wshadow -g
 LDFLAGS := -lm
-INCLUDES := -I$(SRC_DIR) -I$(NEURON_DIR)
+LDLIBS := -lopenblas
+
+INCLUDES := -I$(SRC_DIR) -I$(NEURON_DIR) -I/usr/include/openblas
 
 # Executable target
 TARGET := $(BIN_DIR)/run_simulation
@@ -19,10 +21,7 @@ SRC := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(NEURON_DIR)/*.c)
 TEST_SRC := $(wildcard $(TEST_DIR)/*.c)
 
 # Object files
-SRC_OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o, \
-             $(filter $(SRC_DIR)/%.c,$(SRC))) \
-           $(patsubst $(NEURON_DIR)/%.c,$(BUILD_DIR)/neurons/%.o, \
-             $(filter $(NEURON_DIR)/%.c,$(SRC)))
+SRC_OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o, $(filter $(SRC_DIR)/%.c,$(SRC))) $(patsubst $(NEURON_DIR)/%.c,$(BUILD_DIR)/neurons/%.o, $(filter $(NEURON_DIR)/%.c,$(SRC)))
 
 # All source objects except main.o (to use for tests linking)
 SRC_OBJ_NO_MAIN := $(filter-out $(BUILD_DIR)/main.o, $(SRC_OBJ))
@@ -41,12 +40,12 @@ src: $(TARGET)
 # Link main binary
 $(TARGET): $(SRC_OBJ)
 	@mkdir -p $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 # Link each test binary
 $(BIN_DIR)/%: $(BUILD_DIR)/tests/%.o $(SRC_OBJ_NO_MAIN)
 	@mkdir -p $(BIN_DIR)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
 # Compile rules
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
@@ -70,4 +69,3 @@ clean:
 
 # Debug helper
 print-%: ; @echo $* = $($*)
-

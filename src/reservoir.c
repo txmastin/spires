@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <cblas.h>
 // #include "spires.h"
 #include "reservoir.h"
 #include "math_utils.h"
@@ -171,9 +172,7 @@ void train_output_iteratively(struct reservoir *reservoir, double target, double
     double error = target - prediction;
 
     // update W_out
-    for (size_t i =0; i < reservoir->num_neurons; i++) {
-        reservoir->W_out[i] += state[i] * error * lr;
-    }
+    cblas_daxpy(reservoir->num_neurons, error * lr, state, 1, reservoir->W_out, 1);
 
     free(state);
 }

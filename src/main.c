@@ -87,7 +87,7 @@ int main(void)
 
     // Generate chaotic mackey-glass signal
     // Parameters for chaotic behavior
-    size_t timesteps = 100;
+    size_t timesteps = 200;
     double x0 = 0.1;
     double tau = 20; // Must be > 17 for chaos
     double beta = 0.2;
@@ -103,20 +103,29 @@ int main(void)
     // Generate the series
     generate_mackey_glass(input_series, timesteps, x0, tau, beta, gamma, n);
 
+    double *temp = &input_series[5];
     double *target_series = input_series;
-    double series_length = timesteps;
+    input_series = temp; 
+    double series_length = timesteps-5;
     double lambda = 0.01;
     
+    // training type
+    enum training_type {
+        RIDGE,
+        ITERATIVE,
+    };
+    enum training_type training = RIDGE;
+    
     // reservoir parameters 
-    size_t num_neurons = 200;
-    size_t num_inputs = 200;
-    size_t num_outputs = 200;
-    double rho = 0.9;
+    size_t num_neurons = 400;
+    size_t num_inputs = num_neurons;
+    size_t num_outputs = num_neurons;
+    double rho = 0.99;
     double ei_ratio = 0.8;
     double input_strength = 1.0;
-    double connectivity = 0.1;
-    double dt = 0.01;
-    enum neuron_type neuron_type = LIF_DISCRETE;
+    double connectivity = 0.2;
+    double dt = 0.1;
+    enum neuron_type neuron_type = FLIF_GL;
     enum connectivity_type connectivity_type = RANDOM;
  
     // neuron parameters
@@ -125,13 +134,13 @@ int main(void)
         0.0,    // params[1]: V_reset
         0.0,    // params[2]: V_rest
         20.0,   // params[3]: tau_m
-        0.4,    // params[4]: alpha
+        0.7,    // params[4]: alpha
         dt,     // params[5]: dt
         timesteps,   // params[6]: Tmem
-        0.25     // params[7]: bias
+        0.1     // params[7]: bias
     };
 
-   double discrete_neuron_params[] = {
+    double discrete_neuron_params[] = {
         0.0, // params[0]: V_0
         1.0, // params[1]: V_th
         0.2, // params[2]: leak_rate
@@ -153,17 +162,43 @@ int main(void)
             
     
     // Create reservoir
-    struct reservoir *res = create_reservoir(num_neurons, num_inputs, num_outputs, rho, ei_ratio, input_strength, connectivity, dt, connectivity_type, neuron_type, neuron_params);
+    struct reservoir *res = create_reservoir(num_neurons, num_inputs, num_outputs, rho, ei_ratio, 
+                                            input_strength, connectivity, dt, connectivity_type, 
+                                            neuron_type, neuron_params);
     init_reservoir(res); 
     // run training and inferencing
-    train_output_ridge_regression(res, input_series, target_series, series_length, lambda); 
+
+    switch(training) {
+        case RIDGE:
+            train_output_ridge_regression(res, input_series, target_series, series_length, lambda); 
+            break;
+        case ITERATIVE:
+            float lr = 0.01;
+            float err = 0.0;
+            int num_epochs = 1000;
+            float avg_err = 0.0;
+            for (int epoch = 0; epoch < num_epochs; epoch++) {
+                for (size_t i = 0; i < series_length; i++) {
+                    step_reservoir(res, input_series[i]);
+                    train_output_iteratively(res, target_series[i], lr);
+                    err = compute_output(res) - target_series[i]; 
+                    avg_err += fabs(err);
+                }
+                avg_err /= series_length;
+                printf("Average error for epoch %zu: %f\n", epoch, avg_err);
+            }
+            break;
+    }
+
     reset_reservoir(res); // necessary for fractional neurons 
+    
+
     double *reservoir_outputs = run_reservoir(res, input_series, series_length); 
     
     // saving final inference output of the reservoir
     fprintf(output_file, "# Timestep Input_Signal Reservoir_Output\n");
     for (size_t i = 0; i < series_length; i++) {
-        fprintf(output_file, "%zu %f %f\n", i, target_series[i], reservoir_outputs[i]);
+        fprintf(output_file, "%zu %f %f\n", i, input_series[i], reservoir_outputs[i]);
     }
 
     free_reservoir(res);

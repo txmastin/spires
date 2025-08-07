@@ -2,8 +2,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <cblas.h>
+#include <lapacke.h>
+#include <string.h>
+
 
 // Matrix-vector multiplication: y = A * x
+void mat_vec_mult(double *A, double *x, double *y, size_t n)
+{
+	cblas_dgemv(CblasRowMajor, CblasNoTrans,
+		    n, n, 1.0, A, n, x, 1, 0.0, y, 1);
+}
+
+/*
 void mat_vec_mult(double *A, double *x, double *y, size_t n) 
 {
     for (size_t i = 0; i < n; i++) {
@@ -13,8 +24,52 @@ void mat_vec_mult(double *A, double *x, double *y, size_t n)
         }
     }
 }
+*/
 
 // Power Iteration to estimate spectral radius
+double calc_spectral_radius(double *A, size_t n)
+{
+	const unsigned int max_iter = 1000;
+	const double tol = 1e-6;
+
+	double x[n];
+	double y[n];
+
+	size_t i;
+	for (i = 0; i < n; i++)
+		x[i] = 1.0;
+
+	double lambda_old = 0.0;
+	double lambda_new = 0.0;
+
+	unsigned int iter;
+	for (iter = 0; iter < max_iter; iter++) {
+		/* y = A * x */
+		cblas_dgemv(CblasRowMajor, CblasNoTrans,
+			    n, n, 1.0, A, n, x, 1, 0.0, y, 1);
+
+		/* Estimate largest magnitude component (Rayleigh estimate) */
+		lambda_new = 0.0;
+		for (i = 0; i < n; i++) {
+			double abs_y = fabs(y[i]);
+			if (abs_y > lambda_new)
+				lambda_new = abs_y;
+		}
+
+		/* Normalize y -> x */
+		for (i = 0; i < n; i++)
+			x[i] = y[i] / lambda_new;
+
+		/* Check convergence */
+		if (fabs(lambda_new - lambda_old) < tol)
+			break;
+
+		lambda_old = lambda_new;
+	}
+
+	return lambda_new;
+}
+/*
 double calc_spectral_radius(double *A, size_t n) 
 {
 
@@ -53,7 +108,16 @@ double calc_spectral_radius(double *A, size_t n)
     free(y);
     return lambda_new;
 }
+*/
 
+void rescale_matrix(double *A, size_t n, double target_rho)
+{
+	double rho = calc_spectral_radius(A, n);
+	double rescale_factor = target_rho / rho;
+
+	cblas_dscal(n * n, rescale_factor, A, 1);
+}
+/*
 void rescale_matrix(double* A, size_t n, double target_rho) 
 {
     double rho = calc_spectral_radius(A, n);
@@ -65,7 +129,7 @@ void rescale_matrix(double* A, size_t n, double target_rho)
         A[i] *= rescale_factor;  
     }
 }
-
+*/
 /**
  * @brief Transposes a matrix.
  * @param A The input matrix (rows x cols).
@@ -86,6 +150,17 @@ void mat_transpose(double *A, double *A_T, size_t rows, size_t cols)
  * @param B Input matrix of size (c1 x c2).
  * @param C Output matrix of size (r1 x c2).
  */
+
+void mat_mat_mult(double *A, double *B, double *C,
+		  size_t r1, size_t c1, size_t c2)
+{
+	cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+		    r1, c2, c1,
+		    1.0, A, c1,
+		    B, c2,
+		    0.0, C, c2);
+}
+/*
 void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t c2) 
 {
     for (size_t i = 0; i < r1; i++) {
@@ -97,7 +172,7 @@ void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t 
         }
     }
 }
-
+*/
 /**
  * @brief Solves a system of linear equations Ax = b using LU decomposition.
  * This function decomposes A into L and U, then solves Ly = b (forward substitution)
@@ -109,6 +184,62 @@ void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t 
  * @param n The size of the system.
  * @return 0 on success, -1 on failure (e.g., singular matrix).
  */
+int solve_linear_system_lud(double *A, double *b, double *x, size_t n)
+{
+	int info, *ipiv;
+	double *A_copy, *b_copy;
+	size_t i;
+
+	/* Allocate pivot array */
+	ipiv = malloc(n * sizeof(int));
+	if (!ipiv) {
+		fprintf(stderr, "Error: malloc failed for ipiv\n");
+		return -1;
+	}
+
+	/* Make copies of A and b because dgesv overwrites inputs */
+	A_copy = malloc(n * n * sizeof(double));
+	if (!A_copy) {
+		fprintf(stderr, "Error: malloc failed for A_copy\n");
+		free(ipiv);
+		return -1;
+	}
+	memcpy(A_copy, A, n * n * sizeof(double));
+
+	b_copy = malloc(n * sizeof(double));
+	if (!b_copy) {
+		fprintf(stderr, "Error: malloc failed for b_copy\n");
+		free(ipiv);
+		free(A_copy);
+		return -1;
+	}
+	memcpy(b_copy, b, n * sizeof(double));
+
+	/* Solve system: A_copy * x = b_copy */
+	info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, n, 1, A_copy, n, ipiv, b_copy, 1);
+
+	if (info != 0) {
+		if (info < 0)
+			fprintf(stderr, "Error: Argument %d had illegal value\n", -info);
+		else
+			fprintf(stderr, "Error: U[%d,%d] is exactly zero. Matrix is singular.\n", info, info);
+		free(ipiv);
+		free(A_copy);
+		free(b_copy);
+		return -1;
+	}
+
+	/* Copy solution to output vector */
+	for (i = 0; i < n; i++)
+		x[i] = b_copy[i];
+
+	free(ipiv);
+	free(A_copy);
+	free(b_copy);
+
+	return 0;
+}
+/*
 int solve_linear_system_lud(double *A, double *b, double *x, size_t n) 
 {
     // --- Step 1: LU Decomposition (Doolittle's method) ---
@@ -160,3 +291,4 @@ int solve_linear_system_lud(double *A, double *b, double *x, size_t n)
 
     return EXIT_SUCCESS; 
 }
+*/

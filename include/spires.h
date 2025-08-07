@@ -1,43 +1,29 @@
 #ifndef SPIRES_H
 #define SPIRES_H
 
-
 #include <stdlib.h> /* For size_t */
 
-/*
- * This guard allows the header to be used in C++ code,
- * a standard practice for portable C libraries.
- */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * enum spires_neuron_type - Defines the neuron model for the reservoir.
- */
-enum spires_neuron_type {
-	LIF_DISCRETE,
-	LIF_BIO,
-	FLIF,
-	FLIF_CAPUTO,
-	FLIF_GL
-};
-
-/**
- * enum spires_connectivity_type - Defines the internal connection topology.
- */
-enum spires_connectivity_type {
-	RANDOM,
-	SMALL_WORLD,
-	SCALE_FREE
-};
-
 /*
- * Forward declaration of the main reservoir struct.
- * This makes it an "incomplete type". Users can have pointers
- * to it, but cannot access its members directly, ensuring encapsulation.
+ * Forward declaration of the main reservoir struct. Typedef'd here for usability
  */
-struct spires_reservoir;
+typedef struct reservoir spires_reservoir; 
+
+enum spires_connectivity_type {
+    SPIRES_RANDOM,
+    SPIRES_SMALL_WORLD,
+    SPIRES_SCALE_FREE
+};
+
+enum spires_neuron_type {
+    SPIRES_FLIF_GL,
+    SPIRES_FLIF_CAPUTO,
+    SPIRES_LIF_DISCRETE,
+    SPIRES_LIF_BIO
+};
 
 /**
  * spires_create() - Create and allocate a new spiking reservoir.
@@ -72,16 +58,6 @@ struct spires_reservoir *spires_create(
  */
 void spires_free(struct spires_reservoir *res);
 
-/**
- * spires_init() - Initialize or re-initialize the reservoir's weights.
- * @res:	The reservoir to initialize.
- *
- * Generates the internal and input weight matrices according to the
- * specified connectivity and parameters.
- *
- * Return: 0 on success, or a negative error code on failure.
- */
-int spires_init(struct spires_reservoir *res);
 
 /**
  * spires_reset() - Reset the state of all neurons in the reservoir.
