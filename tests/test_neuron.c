@@ -57,7 +57,7 @@ void run_single_neuron_integration_test(double* neuron_params, double input_curr
 
     for (int i = 0; i < num_steps; i++) {
         // The step_reservoir function handles the micro-stepping internally
-        step_reservoir(res, input_current);
+        step_reservoir(res, &input_current);
 
         // Check for a spike
         if (get_neuron_spike(res->neurons[0], res->neuron_type) == 1.0 && first_spike_time < 0) {

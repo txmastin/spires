@@ -12,8 +12,8 @@ enum connectivity_type {
 struct reservoir {
     void **neurons; 
     size_t num_neurons;
-    size_t num_inputs;     // for now, default to num_neurons
-    size_t num_outputs;    // ditto here
+    size_t num_inputs;      
+    size_t num_outputs;     
     double spectral_radius;
     double ei_ratio;
     double input_strength;
@@ -32,18 +32,19 @@ struct reservoir* create_reservoir(
     double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
     enum connectivity_type connectivity_type, enum neuron_type neuron_type, double *neuron_params);
 
-double compute_output(struct reservoir *reservoir);
+void compute_output(struct reservoir *reservoir, double *output_vector);
 double compute_activity(struct reservoir *reservoir);
-void step_reservoir(struct reservoir *reservoir, double input);
-double *run_reservoir(struct reservoir *reservoir, double *input_series, size_t input_length);
+void step_reservoir(struct reservoir *reservoir, double *input_vector);
+double *run_reservoir(struct reservoir *reservoir, double *input_series, size_t input_length); // input_series is a flattened array of input_vector * num_inputs
 void free_reservoir(struct reservoir *reservoir);
 int init_weights(struct reservoir *reservoir);
 int randomize_output_layer(struct reservoir *reservoir);
 int rescale_weights(struct reservoir *reservoir);
 int init_reservoir(struct reservoir *reservoir);
 double *read_reservoir_state(struct reservoir *reservoir);
-void train_output_iteratively(struct reservoir *reservoir, double target, double lr);
-void train_output_ridge_regression(struct reservoir *reservoir, double *input_series, double *target_series, size_t series_length, double lambda);
+void train_output_iteratively(struct reservoir *reservoir, double *target_vector, double lr);
+void train_output_ridge_regression(struct reservoir *reservoir, double *input_series, 
+                                double *target_series, size_t series_length, double lambda);
 void reset_reservoir(struct reservoir *reservoir);
 #endif // RESERVOIR_H
 
