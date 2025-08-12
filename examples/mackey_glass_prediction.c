@@ -125,7 +125,7 @@ int main(void)
     double input_strength = 1.0;
     double connectivity = 0.2;
     double dt = 0.1;
-    enum neuron_type neuron_type = LIF_DISCRETE;
+    enum neuron_type neuron_type = FLIF_GL;
     enum connectivity_type connectivity_type = RANDOM;
  
     // neuron parameters
