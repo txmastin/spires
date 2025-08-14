@@ -1,4 +1,4 @@
-Spiking reservoirs are class of reservoir computing (RC) systems configured to utilize the temporal dynamics of spiking activity for computation. In general, a spiking reservoir includes $N$ interconnected spiking neurons, such as those based on the leaky integrate-and-fire neuron model, where each neuron integrates input from other respectively connected neurons over time, accumulating
+Spires is a high performance spiking reservoir library. Spiking reservoirs are class of reservoir computing (RC) systems configured to utilize the temporal dynamics of spiking activity for computation. In general, a spiking reservoir includes $N$ interconnected spiking neurons, such as those based on the leaky integrate-and-fire neuron model, where each neuron integrates input from other respectively connected neurons over time, accumulating
 a membrane potential $v\_i$:
 
 
