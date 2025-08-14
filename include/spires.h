@@ -1,101 +1,116 @@
 #ifndef SPIRES_H
 #define SPIRES_H
 
-#include <stdlib.h> /* For size_t */
+/* Public, single-header API for spires.
+ *
+ * Outside users should only include this file:
+ *     #include <spires.h>
+ *
+ * Coding style:
+ *  - snake_case identifiers
+ *  - typedefs only for user-facing enums/opaque handles/config
+ *  - no hidden allocations in hot paths
+ */
+
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*
- * Forward declaration of the main reservoir struct. Typedef'd here for usability
+/* ----------------------------
+ * Public status codes
+ * ---------------------------- */
+typedef enum {
+    SPIRES_OK = 0,
+    SPIRES_ERR_INVALID_ARG,
+    SPIRES_ERR_ALLOC,
+    SPIRES_ERR_INTERNAL
+} spires_status;
+
+/* Opaque handle (implementation is private) */
+typedef struct spires_reservoir spires_reservoir;
+
+/* ----------------------------
+ * Public enums mirroring backend options
+ * (ordering should match your backend enums)
+ * ---------------------------- */
+typedef enum {
+    SPIRES_CONN_RANDOM = 0,
+    SPIRES_CONN_SMALL_WORLD,
+    SPIRES_CONN_SCALE_FREE
+} spires_connectivity_type;
+
+typedef enum {
+    SPIRES_NEURON_LIF_DISCRETE = 0,
+    SPIRES_NEURON_LIF_BIO,
+    SPIRES_NEURON_FLIF_CAPUTO,
+    SPIRES_NEURON_FLIF_GL,
+    SPIRES_NEURON_FLIF_DIFFUSIVE
+} spires_neuron_type;
+
+/* ----------------------------
+ * Creation-time configuration
+ * (kept minimal; forwards to create_reservoir(...) as-is)
+ * ---------------------------- */
+typedef struct {
+    size_t num_neurons;
+    size_t num_inputs;
+    size_t num_outputs;
+    double spectral_radius;
+    double ei_ratio;
+    double input_strength;
+    double connectivity;          /* density or similar per backend */
+    double dt;
+    spires_connectivity_type connectivity_type;
+    spires_neuron_type       neuron_type;
+    double *neuron_params;        /* forwarded to init_neuron; caller owns */
+} spires_reservoir_config;
+
+/* ----------------------------
+ * Lifecycle
+ * ---------------------------- */
+spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
+                                      spires_reservoir **out_r);
+void          spires_reservoir_destroy(spires_reservoir *r);
+spires_status spires_reservoir_reset(spires_reservoir *r);
+
+/* ----------------------------
+ * Stepping
+ * ---------------------------- */
+/* Step once with an input vector u_t of length num_inputs.
+ * Pass NULL for zeros. No output buffer here; use state or your own output accessor.
  */
-typedef struct reservoir spires_reservoir; 
+spires_status spires_step(spires_reservoir *r, const double *u_t);
 
-enum spires_connectivity_type {
-    SPIRES_RANDOM,
-    SPIRES_SMALL_WORLD,
-    SPIRES_SCALE_FREE
-};
+/* ----------------------------
+ * Training
+ * ---------------------------- */
+spires_status spires_train_online(spires_reservoir *r,
+                                  const double *target_vec, double lr);
 
-enum spires_neuron_type {
-    SPIRES_FLIF_GL,
-    SPIRES_FLIF_CAPUTO,
-    SPIRES_LIF_DISCRETE,
-    SPIRES_LIF_BIO
-};
+spires_status spires_train_ridge(spires_reservoir *r,
+                                 const double *input_series,
+                                 const double *target_series,
+                                 size_t series_length, double lambda);
 
-/**
- * spires_create() - Create and allocate a new spiking reservoir.
- * @num_neurons:	Number of neurons in the reservoir.
- * @num_inputs:		Number of external input channels.
- * @num_outputs:	Number of output channels.
- * @spectral_radius:	The desired spectral radius (rho) of the weights.
- * @ei_ratio:		Ratio of excitatory to inhibitory neurons.
- * @input_strength:	Scaling factor for the input weights.
- * @connectivity:	Connection probability for the internal weight matrix.
- * @dt:			Simulation timestep.
- * @connectivity_type:	The connection topology to generate.
- * @neuron_type:	The neuron model to use for all neurons.
- * @neuron_params:	Pointer to an array of parameters for the chosen model.
- *
- * This function allocates memory for a new reservoir and its components.
- * The internal weights are not initialized until spires_init() is called.
- *
- * Return: A pointer to the new struct spires_reservoir on success,
- * NULL on memory allocation failure.
+/* ----------------------------
+ * State access
+ * ---------------------------- */
+/* Returns a newly malloc'd copy of the current neuron state (length = num_neurons).
+ * Caller must free().
  */
-struct spires_reservoir *spires_create(
-        size_t num_neurons, size_t num_inputs, size_t num_outputs,
-	double spectral_radius, double ei_ratio, double input_strength,
-	double connectivity, double dt,
-	enum spires_connectivity_type connectivity_type,
-	enum spires_neuron_type neuron_type, double *neuron_params);
+double *spires_read_state_copy(spires_reservoir *r);
 
-/**
- * spires_free() - Free all memory associated with a reservoir.
- * @res:	The reservoir to free. Can be NULL.
- */
-void spires_free(struct spires_reservoir *res);
-
-
-/**
- * spires_reset() - Reset the state of all neurons in the reservoir.
- * @res:	The reservoir whose state will be reset.
- */
-void spires_reset(struct spires_reservoir *res);
-
-/**
- * spires_train_ridge_regression() - Train the reservoir's output weights.
- * @res:		The reservoir to train.
- * @input_series:	An array of input values.
- * @target_series:	An array of target output values.
- * @series_length:	The number of timesteps in the series.
- * @lambda:		The regularization parameter for ridge regression.
- */
-void spires_train_ridge_regression(struct spires_reservoir *res,
-	const double *input_series, const double *target_series,
-	size_t series_length, double lambda);
-
-/**
- * spires_run() - Run the reservoir in inference mode.
- * @res:		The reservoir to run.
- * @input_series:	An array of input values.
- * @series_length:	The number of timesteps in the input series.
- *
- * Feeds the input series into the trained reservoir and collects the output.
- * Assumes the reservoir has already been trained.
- *
- * Return: A pointer to a newly allocated array containing the output.
- * The caller is responsible for freeing this memory. Returns NULL
- * on allocation failure.
- */
-double *spires_run(struct spires_reservoir *res,
-	const double *input_series, size_t series_length);
-
+/* ----------------------------
+ * Introspection
+ * ---------------------------- */
+size_t spires_num_neurons(const spires_reservoir *r);
+size_t spires_num_inputs(const spires_reservoir *r);
+size_t spires_num_outputs(const spires_reservoir *r);
 
 #ifdef __cplusplus
-}
+} /* extern "C" */
 #endif
-
 #endif /* SPIRES_H */

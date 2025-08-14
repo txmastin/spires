@@ -5,13 +5,15 @@
 #include "neurons/lif_bio.h"
 #include "neurons/flif_caputo.h"
 #include "neurons/flif_gl.h"
+#include "neurons/flif_diffusive.h"
 
 
 enum neuron_type {
     LIF_DISCRETE,
     LIF_BIO,
     FLIF_CAPUTO,
-    FLIF_GL
+    FLIF_GL,
+    FLIF_DIFFUSIVE
 };
 
 void* init_neuron(enum neuron_type type, double *neuron_params);

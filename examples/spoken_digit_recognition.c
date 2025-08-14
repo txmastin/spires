@@ -180,10 +180,10 @@ int main(void) {
         0.0,    // params[1]: V_reset
         0.0,    // params[2]: V_rest
         20.0,   // params[3]: tau_m
-        0.2,    // params[4]: alpha
+        0.1,    // params[4]: alpha
         dt,     // params[5]: dt
-        SEQUENCE_LENGTH,   // params[6]: Tmem
-        0.35     // params[7]: bias
+        10.0,   // params[6]: Tmem
+        0.00     // params[7]: bias
     };
 
     double discrete_neuron_params[] = {
@@ -192,13 +192,16 @@ int main(void) {
         0.2, // params[2]: leak_rate
         0.05 // params[3]: bias
     };
-    enum neuron_type neuron_type = FLIF_GL;
+    enum neuron_type neuron_type = FLIF_DIFFUSIVE;
     double *neuron_params = NULL;
     switch(neuron_type) {
         case LIF_DISCRETE:
             neuron_params = discrete_neuron_params;
             break;
         case FLIF_GL:
+            neuron_params = fractional_neuron_params;
+            break;
+        case FLIF_DIFFUSIVE:
             neuron_params = fractional_neuron_params;
             break;
         default:

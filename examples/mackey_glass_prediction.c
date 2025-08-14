@@ -125,7 +125,7 @@ int main(void)
     double input_strength = 1.0;
     double connectivity = 0.2;
     double dt = 0.1;
-    enum neuron_type neuron_type = FLIF_GL;
+    enum neuron_type neuron_type = FLIF_DIFFUSIVE;
     enum connectivity_type connectivity_type = RANDOM;
  
     // neuron parameters
@@ -152,7 +152,7 @@ int main(void)
         case LIF_DISCRETE:
             neuron_params = discrete_neuron_params;
             break;
-        case FLIF_GL:
+        case FLIF_DIFFUSIVE:
             neuron_params = fractional_neuron_params;
             break;
         default:

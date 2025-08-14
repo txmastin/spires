@@ -5,7 +5,7 @@ set ylabel "MC"
 set key top right
 set grid
 
-plot "data/alpha_mc_3000.dat" using 1:4 with linespoints title "MC"
+plot "data/alpha_mc.dat" using 1:4 with linespoints title "MC"
 
 
 pause -1

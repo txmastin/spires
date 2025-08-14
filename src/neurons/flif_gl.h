@@ -21,8 +21,8 @@ struct flif_gl_neuron {
     int mem_len;        // The actual size of the history buffer below
 
     // Memory components
-    double* V_history;  // A circular buffer for recent voltage history
-    double* coeffs;     // Pre-computed Grünwald-Letnikov coefficients
+    double * V_history;  // A circular buffer for recent voltage history
+    double * coeffs;     // Pre-computed Grünwald-Letnikov coefficients
 
 };
 

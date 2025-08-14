@@ -10,13 +10,13 @@ static void compute_gl_coeffs(double* coeffs_array, double alpha, int N)
     if (!coeffs_array) return;
     coeffs_array[0] = 1.0;
     for (int k = 1; k < N; k++) {
-        coeffs_array[k] = coeffs_array[k - 1] * (1.0 - (alpha + 1.0) / (double)k);
+        coeffs_array[k] = coeffs_array[k - 1] * (1.0 - (alpha + 1.0) / (float)k);
     }
 }
 
 struct flif_gl_neuron* init_flif_gl(double* params) 
 {
-    struct flif_gl_neuron* n = (struct flif_gl_neuron*)malloc(sizeof(struct flif_gl_neuron));
+    struct flif_gl_neuron* n = malloc(sizeof(struct flif_gl_neuron));
     if (!n) return NULL;
 
     // Map parameters from the array passed by main.c
@@ -39,8 +39,8 @@ struct flif_gl_neuron* init_flif_gl(double* params)
     n->mem_len = (T_mem > 0 && n->dt > 0) ? (int)(T_mem / n->dt) : 2000;
     if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
 
-    n->V_history = (double*)malloc(n->mem_len * sizeof(double));
-    n->coeffs    = (double*)malloc(n->mem_len * sizeof(double));
+    n->V_history = malloc(n->mem_len * sizeof(double));
+    n->coeffs    = malloc(n->mem_len * sizeof(double));
 
     // Initialize history buffer to the resting potential
     for (int i = 0; i < n->mem_len; i++) {

@@ -18,6 +18,9 @@ void* init_neuron(enum neuron_type type, double *neuron_params)
         case FLIF_GL:
             neuron = (struct flif_gl_neuron *)init_flif_gl(neuron_params);
             break;
+        case FLIF_DIFFUSIVE:
+            neuron = (struct flif_diffusive_neuron *)init_flif_diffusive(neuron_params);
+            break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
     }
@@ -40,6 +43,9 @@ void update_neuron(void *neuron, enum neuron_type type, double input, double dt)
         case FLIF_GL:
             update_flif_gl((struct flif_gl_neuron *)neuron, input, dt);
             break;
+        case FLIF_DIFFUSIVE:
+            update_flif_diffusive((struct flif_diffusive_neuron *)neuron, input, dt);
+            break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
     }
@@ -60,6 +66,9 @@ double get_neuron_state(void *neuron, enum neuron_type type)
             break;
         case FLIF_GL:
             val = ((struct flif_gl_neuron *)neuron)->V;
+            break;
+        case FLIF_DIFFUSIVE:
+            val = ((struct flif_diffusive_neuron *)neuron)->V;
             break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");
@@ -83,6 +92,9 @@ double get_neuron_spike(void *neuron, enum neuron_type type)
         case FLIF_GL:
             spike = ((struct flif_gl_neuron *)neuron)->spike;
             break;
+        case FLIF_DIFFUSIVE:
+            spike = ((struct flif_diffusive_neuron *)neuron)->spike;
+            break;
         default:
             fprintf(stderr, "Neuron type unavailable\n");
     }
@@ -104,6 +116,9 @@ void free_neuron(void *neuron, enum neuron_type type)
             break;
         case FLIF_GL:
             free_flif_gl((struct flif_gl_neuron *)neuron);
+            break;
+        case FLIF_DIFFUSIVE:
+            free_flif_diffusive((struct flif_diffusive_neuron *)neuron);
             break;
     }
     neuron = NULL;

@@ -24,11 +24,11 @@
 #define TEST_WASHOUT_STEPS  500
 
 // Reservoir hyperparams
-static const size_t NUM_NEURONS      = 4000;
+static const size_t NUM_NEURONS      = 1000;
 static const int    AVG_DEGREE       = 15;
 static const double SPECTRAL_RADIUS  = 0.9;
 static const double EI_RATIO         = 0.8;
-static const double INPUT_STRENGTH   = 1.0;
+static const double INPUT_STRENGTH   = 1.1;
 static const double DT               = 1.0;
 
 // Connectivity as probability = K/(N-1) for ER(RANDOM)
@@ -50,6 +50,8 @@ static const double V_RESET= 0.0;
 static const double V_REST = 0.0;
 static const double TAU_M  = 20.0;
 static const int    TMEM   = 2048;
+static const double BIAS   = 0.5; // used as bias if BIAS_FROM_ALPHA is not used
+static const int BIAS_FROM_ALPHA = 0; // used if you want to dynamically set bias based on alpha (HIGHLY RECOMMENDED IF USING FLIF_GL NEURON)
 
 // ===================== RNG & Math Helpers =====================
 static inline uint64_t xorshift64star(uint64_t* s) {
@@ -150,8 +152,14 @@ int main(void){
 
     // Sweep alpha
     for (double alpha = ALPHA_START; alpha <= ALPHA_END + 1e-12; alpha += ALPHA_STEP) {
+        double bias;
         // Bias from alpha (closed form)
-        double bias = bias_from_alpha(alpha);
+        if (BIAS_FROM_ALPHA) { 
+            bias = bias_from_alpha(alpha);
+        }
+        else {
+            bias = BIAS;
+        }
 
         // Neuron params array (your layout)
         double fractional_neuron_params[] = {
