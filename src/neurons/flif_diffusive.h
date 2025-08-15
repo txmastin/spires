@@ -7,17 +7,16 @@
 //   α = 0 → uniform refractory on [t_min, t_max]
 //   0<α<1 → mixture: point mass at t_ref with weight m(α)=α^γ and truncated power-law tail with slope q(α)=QMAX·α
 //
-// Params layout (identical order to flif_gl):
+// Params layout:
 //   params[0] = V_th
 //   params[1] = V_reset
 //   params[2] = V_rest
 //   params[3] = tau_m
 //   params[4] = alpha
-//   params[5] = dt
-//   params[6] = T_mem_or_tref
+//   params[5] = T_mem_or_tref
 //                 - if α<1: upper truncation t_max for refractory sampling (if <=0, default chosen)
 //                 - if α≥1: deterministic refractory t_ref (seconds; if <=0, no refractory)
-//   params[7] = bias
+//   params[6] = bias
 //
 // Compile-time knobs (override with -D flags as needed):
 #ifndef FLIF_DIFF_TMIN_MULT
@@ -45,7 +44,7 @@ extern "C" {
 
 struct flif_diffusive_neuron {
     // Parameters (double precision)
-    double V_th, V_reset, V_rest, tau_m, alpha, dt, bias;
+    double V_th, V_reset, V_rest, tau_m, alpha, bias;
 
     // State
     double V;
@@ -69,7 +68,7 @@ struct flif_diffusive_neuron {
 };
 
 // API (double throughout)
-struct flif_diffusive_neuron* init_flif_diffusive(double* params);
+struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt);
 void   update_flif_diffusive(struct flif_diffusive_neuron* n, double input, double dt);
 void   free_flif_diffusive(struct flif_diffusive_neuron* n);
 

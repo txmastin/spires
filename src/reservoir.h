@@ -32,7 +32,7 @@ struct reservoir* create_reservoir(
     double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
     enum connectivity_type connectivity_type, enum neuron_type neuron_type, double *neuron_params);
 
-void compute_output(struct reservoir *reservoir, double *output_vector);
+int compute_output(struct reservoir *reservoir, double *output_vector);
 double compute_activity(struct reservoir *reservoir);
 void step_reservoir(struct reservoir *reservoir, double *input_vector);
 double *run_reservoir(struct reservoir *reservoir, double *input_series, size_t input_length); // input_series is a flattened array of input_vector * num_inputs

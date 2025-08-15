@@ -84,6 +84,20 @@ spires_status spires_reservoir_reset(spires_reservoir *r);
  */
 spires_status spires_step(spires_reservoir *r, const double *u_t);
 
+
+
+/* ----------------------------
+ * Running (forward inferencing)
+ * ---------------------------- */
+/* Run the reservoir on a series of inputs.
+ * input_series: flattened [series_length x num_inputs] (for Din=1 just length=series_length)
+ * Returns a newly malloc'd array of length series_length with the readout outputs.
+ * Caller must free().
+ */
+
+double *spires_run(spires_reservoir *r, const double *input_series, size_t series_length);
+
+
 /* ----------------------------
  * Training
  * ---------------------------- */
@@ -102,6 +116,11 @@ spires_status spires_train_ridge(spires_reservoir *r,
  * Caller must free().
  */
 double *spires_read_state_copy(spires_reservoir *r);
+
+/* Compute current readout y = W_out * state (+ b). 
+ * Caller provides an array sized to num_outputs. */
+spires_status spires_compute_output(spires_reservoir *r, double *out);
+
 
 /* ----------------------------
  * Introspection

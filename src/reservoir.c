@@ -4,6 +4,7 @@
 #include <cblas.h>
 #include <omp.h>
 #include <string.h> // for memcpy
+#include <math.h>
 
 // #include "spires.h"
 #include "reservoir.h"
@@ -42,7 +43,7 @@ struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t
     }
 
     for (size_t i = 0; i < num_neurons; i++) {
-        reservoir->neurons[i] = init_neuron(neuron_type, neuron_params); 
+        reservoir->neurons[i] = init_neuron(neuron_type, neuron_params, dt); 
     }
 
     return reservoir;
@@ -107,7 +108,7 @@ void step_reservoir(struct reservoir *r, double *input_vector)
 
     // The macro step duration is implicitly 1.0.
     // Calculate how many internal micro-steps to run.
-    int num_micro_steps = (int)(1.0 / r->dt);
+    int num_micro_steps = (int)llround(1.0 / r->dt);
     size_t num_neurons = r->num_neurons;
     size_t num_inputs = r->num_inputs;
 
@@ -150,11 +151,11 @@ void step_reservoir(struct reservoir *r, double *input_vector)
 
 
 // compute_output calculates the sum of neuron states * W_out
-void compute_output(struct reservoir *reservoir, double *output_vector) 
+int compute_output(struct reservoir *reservoir, double *output_vector) 
 {
     if (!reservoir || !output_vector) {
         fprintf(stderr, "Error: Reservoir or output vector is NULL.\n");
-        return;
+        return EXIT_FAILURE;
     }
 
     size_t num_neurons = reservoir->num_neurons;
@@ -172,6 +173,7 @@ void compute_output(struct reservoir *reservoir, double *output_vector)
     cblas_dgemv(CblasRowMajor, CblasNoTrans,
                 num_outputs, num_neurons, 1.0, reservoir->W_out, num_neurons,
                 state, 1, 0.0, output_vector, 1);
+    return EXIT_SUCCESS;
 }
 
 // compute_activity returns the sum of spikes
@@ -484,6 +486,6 @@ void reset_reservoir(struct reservoir *reservoir)
 
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         free_neuron(reservoir->neurons[i], reservoir->neuron_type);
-        reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params);
+        reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params, reservoir->dt);
     }
 }

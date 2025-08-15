@@ -2,7 +2,7 @@
 #include<stdlib.h>
 #include "neuron.h"
 
-void* init_neuron(enum neuron_type type, double *neuron_params) 
+void* init_neuron(enum neuron_type type, double *neuron_params, double dt) 
 {
     void* neuron = NULL;
     switch(type) {
@@ -13,13 +13,13 @@ void* init_neuron(enum neuron_type type, double *neuron_params)
             neuron = (struct lif_bio_neuron *)init_lif_bio(neuron_params);
             break;
         case FLIF_CAPUTO:
-            neuron = (struct flif_caputo_neuron *)init_flif_caputo(neuron_params);
+            neuron = (struct flif_caputo_neuron *)init_flif_caputo(neuron_params, dt);
             break;
         case FLIF_GL:
-            neuron = (struct flif_gl_neuron *)init_flif_gl(neuron_params);
+            neuron = (struct flif_gl_neuron *)init_flif_gl(neuron_params, dt);
             break;
         case FLIF_DIFFUSIVE:
-            neuron = (struct flif_diffusive_neuron *)init_flif_diffusive(neuron_params);
+            neuron = (struct flif_diffusive_neuron *)init_flif_diffusive(neuron_params, dt);
             break;
         default:
             fprintf(stderr, "Neuron type unavailable.\n");

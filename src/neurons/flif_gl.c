@@ -14,7 +14,7 @@ static void compute_gl_coeffs(double* coeffs_array, double alpha, int N)
     }
 }
 
-struct flif_gl_neuron* init_flif_gl(double* params) 
+struct flif_gl_neuron* init_flif_gl(double* params, double dt) 
 {
     struct flif_gl_neuron* n = malloc(sizeof(struct flif_gl_neuron));
     if (!n) return NULL;
@@ -26,9 +26,8 @@ struct flif_gl_neuron* init_flif_gl(double* params)
     n->V_rest = params[2];
     n->tau_m  = params[3];
     n->alpha  = params[4];
-    n->dt     = params[5]; // This is the micro-step dt from the reservoir
-    double T_mem = params[6]; // Memory duration in ms, from params
-    n->bias = params[7];
+    double T_mem = params[5]; // Memory duration in ms, from params
+    n->bias = params[6];
 
     // Initialize internal state
     n->internal_step = 0;
@@ -36,7 +35,7 @@ struct flif_gl_neuron* init_flif_gl(double* params)
     n->spike = 0.0;
 
     // Setup the circular history buffer based on memory duration and micro-step dt
-    n->mem_len = (T_mem > 0 && n->dt > 0) ? (int)(T_mem / n->dt) : 2000;
+    n->mem_len = (T_mem > 0 && dt > 0) ? (int)(T_mem / dt) : 2000;
     if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
 
     n->V_history = malloc(n->mem_len * sizeof(double));

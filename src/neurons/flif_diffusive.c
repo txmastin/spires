@@ -65,7 +65,7 @@ static inline long steps_from_time(double W, double dt){
 // ---------------- Public API ----------------
 
 // params: [V_th, V_reset, V_rest, tau_m, alpha, dt, T_mem_or_tref, bias]
-struct flif_diffusive_neuron* init_flif_diffusive(double* params)
+struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt)
 {
     if (!params) return NULL;
     struct flif_diffusive_neuron* n = (struct flif_diffusive_neuron*)malloc(sizeof *n);
@@ -76,13 +76,12 @@ struct flif_diffusive_neuron* init_flif_diffusive(double* params)
     n->V_rest = params[2];
     n->tau_m  = params[3];
     n->alpha  = params[4];
-    n->dt     = params[5];
-    double P6 = params[6];   // T_mem_or_tref
-    n->bias   = params[7];
+    double P6 = params[5];   // T_mem_or_tref
+    n->bias   = params[6];
 
     // Guards
     if (n->tau_m <= 0.0) n->tau_m = 1.0;
-    if (n->dt    <= 0.0) n->dt    = 1e-3;
+    if (dt    <=    0.0)    dt    = 1e-3;
     if (n->alpha <  0.0) n->alpha = 0.0;
     if (n->alpha >  1.0) n->alpha = 1.0;
 
@@ -92,26 +91,26 @@ struct flif_diffusive_neuron* init_flif_diffusive(double* params)
     n->refractory_until = -1;
 
     // Cached Euler gain for LIF subthreshold
-    n->g_euler = n->dt / n->tau_m;
+    n->g_euler = dt / n->tau_m;
 
     if (n->alpha < 1.0) {
         // Heavy-tailed refractory mode
-        n->t_min = (double)FLIF_DIFF_TMIN_MULT * n->dt;
+        n->t_min = (double)FLIF_DIFF_TMIN_MULT * dt;
         n->t_max = (P6 > 0.0) ? P6 : (double)FLIF_DIFF_TMAX_MULT * n->tau_m;
         if (n->t_max <= n->t_min) n->t_max = n->t_min * 2.0;
-        n->t_ref = n->dt; // default point for mixture branch
+        n->t_ref = dt; // default point for mixture branch
 
         // mem_len parity with flif_gl: span horizon over dt
-        int mem_len = (int)(n->t_max / n->dt);
+        int mem_len = (int)(n->t_max / dt);
         if (mem_len < 2) mem_len = 2;
         if (mem_len > MAX_MEM_LEN) mem_len = MAX_MEM_LEN;
         n->mem_len = mem_len;
     } else {
         // Deterministic refractory (standard LIF with optional absolute refractory)
         n->t_ref = (P6 > 0.0) ? P6 : 0.0; // 0 → no absolute refractory
-        n->t_min = (double)FLIF_DIFF_TMIN_MULT * n->dt; // defined for completeness
+        n->t_min = (double)FLIF_DIFF_TMIN_MULT * dt; // defined for completeness
         n->t_max = n->t_ref;
-        n->mem_len = (int)((n->t_ref > 0.0) ? (n->t_ref / n->dt) : 2);
+        n->mem_len = (int)((n->t_ref > 0.0) ? (n->t_ref / dt) : 2);
         if (n->mem_len < 2) n->mem_len = 2;
         if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
     }
@@ -145,23 +144,6 @@ void update_flif_diffusive(struct flif_diffusive_neuron* n, double input, double
     // Clear spike flag
     if (n->spike == 1.0) n->spike = 0.0;
 
-    // If dt changes, update caches/bounds (no reallocations)
-    if (dt > 0.0 && dt != n->dt) {
-        n->dt = dt;
-        n->g_euler = n->dt / n->tau_m;
-        if (n->alpha < 1.0) {
-            n->t_min = (double)FLIF_DIFF_TMIN_MULT * n->dt;
-            int mem_len = (int)(n->t_max / n->dt);
-            if (mem_len < 2) mem_len = 2;
-            if (mem_len > MAX_MEM_LEN) mem_len = MAX_MEM_LEN;
-            n->mem_len = mem_len;
-        } else {
-            n->mem_len = (int)((n->t_ref > 0.0) ? (n->t_ref / n->dt) : 2);
-            if (n->mem_len < 2) n->mem_len = 2;
-            if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
-        }
-    }
-
     // Subthreshold Euler LIF using previous V
     double V_prev = n->V;
     double rhs = -((double)V_prev - (double)n->V_rest) + input + n->bias;
@@ -179,11 +161,11 @@ void update_flif_diffusive(struct flif_diffusive_neuron* n, double input, double
         if (n->alpha < 1.0) {
             // Alpha-controlled mixture refractory
             double W = sample_alpha_refractory(n->t_min, n->t_max, n->alpha, n->t_ref, (uint64_t*)&n->rng);
-            steps = steps_from_time(W, n->dt);
+            steps = steps_from_time(W, dt);
             if (steps < 1) steps = 1; // enforce at least one step
         } else {
             // Deterministic refractory (standard LIF mode)
-            steps = steps_from_time(n->t_ref, n->dt);
+            steps = steps_from_time(n->t_ref, dt);
             // steps may be zero if t_ref==0 → immediate eligibility next step
         }
         n->refractory_until = n->internal_step + steps;

@@ -3,7 +3,7 @@
 #include <math.h>
 #include "flif_caputo.h"
 
-struct flif_caputo_neuron *init_flif_caputo(double *params) 
+struct flif_caputo_neuron *init_flif_caputo(double *params, double dt) 
 {
     struct flif_caputo_neuron *n = malloc(sizeof(struct flif_caputo_neuron));
     if (!n) return NULL;
@@ -18,14 +18,13 @@ struct flif_caputo_neuron *init_flif_caputo(double *params)
     n->alpha = params[6];
     n->t_ref = params[7];
     double T_mem = params[8];
-    n->dt = params[9];
 
     n->V = n->V_0;
     n->spike = 0;
     n->t_prev = 2 * n->t_ref;
     n->step = 0;
 
-    n->mem_len = (T_mem > 0) ? (int)(T_mem / n->dt) : MAX_MEM_LEN;
+    n->mem_len = (T_mem > 0) ? (int)(T_mem / dt) : MAX_MEM_LEN;
     if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
 
     n->delta_mem = calloc(n->mem_len - 2, sizeof(double));
@@ -37,7 +36,7 @@ struct flif_caputo_neuron *init_flif_caputo(double *params)
         n->coeffs[i] = pow(x, 1.0 - n->alpha) - pow(x - 1.0, 1.0 - n->alpha);
     }
 
-    n->kr = pow(n->dt, n->alpha) * tgamma(2.0 - n->alpha);
+    n->kr = pow(dt, n->alpha) * tgamma(2.0 - n->alpha);
     return n;
 }
 
@@ -67,7 +66,7 @@ void update_flif_caputo(struct flif_caputo_neuron *n, double input, double dt)
         n->V = n->V_0;
     }
 
-    n->t_prev += n->dt;
+    n->t_prev += dt;
     n->step++;
 }
 

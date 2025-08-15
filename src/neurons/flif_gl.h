@@ -9,7 +9,6 @@ struct flif_gl_neuron {
     double V_rest;
     double tau_m;
     double alpha;
-    double dt;
     double bias;
 
     // Neuron state variables
@@ -27,7 +26,7 @@ struct flif_gl_neuron {
 };
 
 // Function Prototypes
-struct flif_gl_neuron* init_flif_gl(double* params);
+struct flif_gl_neuron* init_flif_gl(double* params, double dt);
 void update_flif_gl(struct flif_gl_neuron* n, double input, double dt);
 void free_flif_gl(struct flif_gl_neuron* n);
 

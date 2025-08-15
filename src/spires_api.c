@@ -1,6 +1,9 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <math.h>
 
+/* Library include */
 #include "spires.h"
 
 /* Private backend headers */
@@ -19,6 +22,18 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
     if (!cfg || !out_r)
         return SPIRES_ERR_INVALID_ARG;
 
+    /* Validate dt once, up front (strict: 1.0 must be an integer multiple of dt) */
+    if (cfg->dt <= 0.0 || cfg->dt > 1.0) {
+        fprintf(stderr, "dt must be in (0, 1.0]\n");
+        return SPIRES_ERR_INVALID_ARG;
+    }
+    double steps_d = 1.0 / cfg->dt;
+    int steps = (int)llround(steps_d);
+    if (steps < 1 || fabs(steps_d - (double)steps) > 1e-12) {
+        fprintf(stderr, "To ensure proper time simulation, dt must evenly divide 1.0 (1/dt≈%.12f)\n", steps_d);
+        return SPIRES_ERR_INVALID_ARG;
+    }
+
     enum connectivity_type conn = (enum connectivity_type)cfg->connectivity_type;
     enum neuron_type ntype = (enum neuron_type)cfg->neuron_type;
 
@@ -29,7 +44,7 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
                                               cfg->ei_ratio,
                                               cfg->input_strength,
                                               cfg->connectivity,
-                                              cfg->dt,
+                                              cfg->dt,           /* same dt flows to backend */
                                               conn,
                                               ntype,
                                               cfg->neuron_params);
@@ -47,7 +62,7 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
         return SPIRES_ERR_ALLOC;
     }
     r->impl = impl;
-    *out_r = r;
+    *out_r  = r;
     return SPIRES_OK;
 }
 
@@ -87,6 +102,18 @@ spires_status spires_step(spires_reservoir *r, const double *u_t)
     return SPIRES_OK;
 }
 
+
+/* --------------- running ---------------- */
+double *spires_run(spires_reservoir *r, const double *input_series, size_t series_length)
+{
+    if (!r || !r->impl || !input_series)
+        return NULL;
+    /* backend function returns malloc'd predictions; caller frees */
+    return run_reservoir(r->impl, (double *)input_series, series_length);
+}
+
+
+
 /* --------------- training --------------- */
 spires_status spires_train_online(spires_reservoir *r,
                                   const double *target_vec, double lr)
@@ -119,6 +146,18 @@ double *spires_read_state_copy(spires_reservoir *r)
         return NULL;
     /* backend returns malloc'd buffer; caller must free */
     return read_reservoir_state(r->impl);
+}
+
+spires_status spires_compute_output(spires_reservoir *r, double *out)
+{
+    if (!r || !r->impl || !out)
+        return SPIRES_ERR_INVALID_ARG;
+
+    /* backend compute_output(struct reservoir*, double* out) -> 0 on success */
+    if (compute_output(r->impl, out) != 0)
+        return SPIRES_ERR_INTERNAL;
+
+    return SPIRES_OK;
 }
 
 /* --------------- introspection --------------- */
