@@ -10,6 +10,10 @@
 #include "reservoir.h"
 #include "math_utils.h"
 
+
+
+/* **** create reservoir ***** */
+
 struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t num_outputs, 
                                 double spectral_radius, double ei_ratio, double input_strength, 
                                 double connectivity, double dt, enum connectivity_type connectivity_type, 
@@ -283,26 +287,47 @@ double generate_weight(double ei_ratio)
  * of the main() application by calling srand(time(NULL)).
  */
 
-int init_weights(struct reservoir *reservoir) 
+/* --- helpers for weight init ----- */
+
+static inline double urand01(void)
 {
-    reservoir->W_in = malloc(reservoir->num_neurons * reservoir->num_inputs * sizeof(double)); 
-    if(reservoir->W_in == NULL) {
-        fprintf(stderr, "Error allocating memory for W_in, size of reservoir: %zu\n", reservoir->num_neurons);
+    return (double)rand() / (double)RAND_MAX;
+}
+
+static inline int has_edge(const double *W, size_t n, size_t i, size_t j)
+{
+    return W[i * n + j] != 0.0;
+}
+
+static inline void add_edge(struct reservoir *r, size_t i, size_t j)
+{
+    r->W[i * r->num_neurons + j] = generate_weight(r->ei_ratio);
+}
+
+int init_weights(struct reservoir *reservoir)
+{
+    reservoir->W_in = malloc(reservoir->num_neurons * reservoir->num_inputs * sizeof(double));
+    if (!reservoir->W_in) {
+        fprintf(stderr, "Error allocating memory for W_in, size of reservoir: %zu\n",
+                reservoir->num_neurons);
         return EXIT_FAILURE;
     }
-    
-    reservoir->W_out = calloc(reservoir->num_neurons * reservoir->num_outputs, sizeof(double)); // set output weights to zero initially
-    if(reservoir->W_out == NULL) {
-        fprintf(stderr, "Error allocating memory for W_out, size of reservoir: %zu\n", reservoir->num_neurons);
+
+    /* zero init output weights */
+    reservoir->W_out = calloc(reservoir->num_neurons * reservoir->num_outputs, sizeof(double));
+    if (!reservoir->W_out) {
+        fprintf(stderr, "Error allocating memory for W_out, size of reservoir: %zu\n",
+                reservoir->num_neurons);
         free(reservoir->W_in);
-        reservoir->W_in = NULL; 
+        reservoir->W_in = NULL;
         return EXIT_FAILURE;
     }
-    
-    // calloc here to ensure non-assigned weights are automatically clamped to 0.0 to simplify the matrix operations
-    reservoir->W = calloc(reservoir->num_neurons * reservoir->num_neurons, sizeof(double)); 
-    if (reservoir->W == NULL) {
-        fprintf(stderr, "Error allocating memory for W, size of reservoir: %zu\n", reservoir->num_neurons);
+
+    /* zero init recurrent weights; unassigned stay 0.0 */
+    reservoir->W = calloc(reservoir->num_neurons * reservoir->num_neurons, sizeof(double));
+    if (!reservoir->W) {
+        fprintf(stderr, "Error allocating memory for W, size of reservoir: %zu\n",
+                reservoir->num_neurons);
         free(reservoir->W_in);
         free(reservoir->W_out);
         reservoir->W_in = NULL;
@@ -310,32 +335,170 @@ int init_weights(struct reservoir *reservoir)
         return EXIT_FAILURE;
     }
 
-    switch(reservoir->connectivity_type) {
-        case RANDOM:
-            for (size_t i = 0; i < reservoir->num_neurons * reservoir->num_inputs; i++) {
-                reservoir->W_in[i] = generate_weight(reservoir->ei_ratio);
+    /* common: input weights always get initialized regardless of connectivity model */
+    {
+        size_t nin = reservoir->num_neurons * reservoir->num_inputs;
+        for (size_t k = 0; k < nin; k++)
+            reservoir->W_in[k] = generate_weight(reservoir->ei_ratio);
+    }
+
+    switch (reservoir->connectivity_type) {
+        case RANDOM: {
+            /* Bernoulli directed graph with edge prob = connectivity, no self-loops */
+            size_t n = reservoir->num_neurons;
+            for (size_t i = 0; i < n; i++) {
+                for (size_t j = 0; j < n; j++) {
+                    if (i == j)
+                        continue;
+                    if (urand01() < reservoir->connectivity)
+                        add_edge(reservoir, i, j);
+                }
             }
-            for (size_t i = 0; i < reservoir->num_neurons; i++) {
-                for(size_t j = 0; j < reservoir->num_neurons; j++) {
-                    if (i == j) continue; // no-self connections
-                    if(((double)rand() / RAND_MAX) < reservoir->connectivity) {
-                        reservoir->W[i * reservoir->num_neurons + j] = generate_weight(reservoir->ei_ratio);
+        } break;
+
+        case SMALL_WORLD: {
+            /* Watts–Strogatz on a directed ring:
+             * - base out-degree K approximates density: K = round(connectivity * (n-1))
+             * - ensure K >= 2 and even
+             * - rewire each ring edge with probability p = 0.1 (tweak if you like)
+             */
+            size_t n = reservoir->num_neurons;
+            if (n < 3) break;
+
+            int K = (int)((reservoir->connectivity) * (double)(n - 1) + 0.5);
+            if (K < 2) K = 2;
+            if (K % 2) K++;             /* even */
+            if (K >= (int)n) K = (int)n - 1;
+
+            double p = 0.1;             /* default WS rewiring prob */
+            /* 1) ring lattice: each i connects to K/2 forward neighbors (directed) */
+            int half = K / 2;
+            for (size_t i = 0; i < n; i++) {
+                for (int s = 1; s <= half; s++) {
+                    size_t j = (i + (size_t)s) % n;   /* forward neighbor */
+                    if (i == j) continue;
+                    add_edge(reservoir, i, j);
+                }
+            }
+            /* 2) rewire each (i -> i+s) with prob p to a random j != i, no duplicate edges */
+            for (size_t i = 0; i < n; i++) {
+                for (int s = 1; s <= half; s++) {
+                    size_t j_old = (i + (size_t)s) % n;
+                    if (urand01() < p) {
+                        /* drop old edge */
+                        reservoir->W[i * n + j_old] = 0.0;
+                        /* choose a new target j_new */
+                        size_t j_new;
+                        int attempts = 0;
+                        do {
+                            j_new = (size_t)(urand01() * (double)n);
+                            if (j_new >= n) j_new = n - 1;
+                            if (++attempts > 10 * (int)n) break; /* fail-safe */
+                        } while (j_new == i || has_edge(reservoir->W, n, i, j_new));
+                        if (j_new != i)
+                            add_edge(reservoir, i, j_new);
                     }
-                } 
+                }
             }
-            break;
+        } break;
+        
+        case SCALE_FREE: {
+            /* Undirected BA → random orientation (both in/out heavy-tailed) */
 
-        case SMALL_WORLD:
-            fprintf(stderr, "Small-world connectivity not yet implemented.\n");
-            break;
+            size_t n = reservoir->num_neurons;
+            if (n < 2) break;
 
-        case SCALE_FREE:
-            fprintf(stderr, "Scale-free connectivity not yet implemented.\n");
-            break;
+            /* Map connectivity to BA parameter m (edges per new node) */
+            int m = (int)((reservoir->connectivity) * (double)(n - 1) + 0.5);
+            if (m < 1)      m = 1;
+            if (m >= (int)n) m = (int)n - 1;
+
+            /* Seed size m0: small connected core (clique). */
+            int m0 = m > 2 ? m : 2;
+            if (m0 >= (int)n) m0 = (int)n - 1;
+
+            /* Optional initial attractiveness (deg + A). A=1 softens hubs a bit; A=0 is classic BA. */
+            const double A = 1.0;
+
+            /* Temporary undirected adjacency (byte per entry; fine for N~few thousands).
+               If you prefer, use a bitset, but this keeps code simple. */
+            unsigned char *adj = calloc(n * n, sizeof(unsigned char));
+            int *deg = calloc(n, sizeof(int));
+            if (!adj || !deg) {
+                fprintf(stderr, "alloc fail in SCALE_FREE\n");
+                free(adj); free(deg);
+                return EXIT_FAILURE;
+            }
+
+            /* --- Seed: clique on m0 nodes (undirected, no self) --- */
+            for (int u = 0; u < m0; u++) {
+                for (int v = u + 1; v < m0; v++) {
+                    adj[(size_t)u * n + (size_t)v] = 1;
+                    adj[(size_t)v * n + (size_t)u] = 1;
+                    deg[u]++; deg[v]++;
+                }
+            }
+
+            /* --- Growth: for v = m0..n-1, connect to m existing nodes via PA on (deg + A) --- */
+            for (size_t v = (size_t)m0; v < n; v++) {
+                int added = 0;
+                int guard = 0;
+                while (added < m && guard < 50 * m) {
+                    /* total "attractiveness" over existing nodes */
+                    double total = 0.0;
+                    for (size_t u = 0; u < v; u++) total += (double)deg[u] + A;
+                    if (total <= 0.0) total = (double)v; /* fallback uniform */
+
+                    /* roulette-wheel pick */
+                    double r = urand01() * total, acc = 0.0;
+                    size_t pick = 0;
+                    for (size_t u = 0; u < v; u++) {
+                        acc += (double)deg[u] + A;
+                        if (r <= acc) { pick = u; break; }
+                    }
+
+                    if (pick != v && !adj[v * n + pick]) {
+                        adj[v * n + pick] = 1;
+                        adj[pick * n + v] = 1;
+                        deg[v]++; deg[pick]++;
+                        added++;
+                    }
+                    guard++;
+                }
+
+                /* Fallback to random unique partners if PA got stuck (rare on small N) */
+                while (added < m) {
+                    size_t pick = (size_t)(urand01() * (double)v);
+                    if (pick >= v) pick = v - 1;
+                    if (pick != v && !adj[v * n + pick]) {
+                        adj[v * n + pick] = 1;
+                        adj[pick * n + v] = 1;
+                        deg[v]++; deg[pick]++;
+                        added++;
+                    }
+                }
+            }
+
+            /* --- Orient each undirected edge randomly and assign weight --- */
+            for (size_t i = 0; i < n; i++) {
+                for (size_t j = i + 1; j < n; j++) {
+                    if (!adj[i * n + j]) continue;
+                    if (urand01() < 0.5) {
+                        reservoir->W[i * n + j] = generate_weight(reservoir->ei_ratio);
+                    } else {
+                        reservoir->W[j * n + i] = generate_weight(reservoir->ei_ratio);
+                    }
+                }
+            }
+
+            free(adj);
+            free(deg);
+        } break;
     }
 
     return EXIT_SUCCESS;
 }
+
 
 int rescale_weights(struct reservoir *reservoir) 
 {
