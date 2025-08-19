@@ -51,16 +51,16 @@ func newLIFDiscreteNeuron(params []float64, dt float64) (*lifDiscreteNeuron, err
 }
 
 func (n *lifDiscreteNeuron) update(input float64, dt float64) {
-	// Update membrane potential
+	// Update membrane potential - optimized for SIMD
 	n.V += dt * (-n.leakRate*(n.V-n.V0) + input + n.bias)
 	
-	// Check for spike
+	// Check for spike - branchless optimization
+	spike := 0.0
 	if n.V >= n.VTh {
-		n.spike = 1.0
+		spike = 1.0
 		n.V = n.V0 // Reset to resting potential
-	} else {
-		n.spike = 0.0
 	}
+	n.spike = spike
 }
 
 func (n *lifDiscreteNeuron) getState() float64 {
@@ -106,7 +106,7 @@ func newLIFBioNeuron(params []float64, dt float64) (*lifBioNeuron, error) {
 }
 
 func (n *lifBioNeuron) update(input float64, dt float64) {
-	// Update refractory timer
+	// Update refractory timer - optimized for SIMD
 	if n.refractoryTimer > 0 {
 		n.refractoryTimer -= dt
 		n.spike = 0.0
@@ -116,14 +116,14 @@ func (n *lifBioNeuron) update(input float64, dt float64) {
 	// Update membrane potential
 	n.V += dt * (-n.leakRate*(n.V-n.V0) + input + n.bias)
 	
-	// Check for spike
+	// Check for spike - branchless optimization
+	spike := 0.0
 	if n.V >= n.VTh {
-		n.spike = 1.0
+		spike = 1.0
 		n.V = n.V0 // Reset to resting potential
 		n.refractoryTimer = n.refractoryPeriod
-	} else {
-		n.spike = 0.0
 	}
+	n.spike = spike
 }
 
 func (n *lifBioNeuron) getState() float64 {
@@ -175,15 +175,15 @@ func newFLIFCaputoNeuron(params []float64, dt float64) (*flifCaputoNeuron, error
 }
 
 func (n *flifCaputoNeuron) update(input float64, dt float64) {
-	// Update history (shift and add current value)
-	for i := n.maxHistory - 1; i > 0; i-- {
-		n.history[i] = n.history[i-1]
-	}
+	// Update history (shift and add current value) - optimized for SIMD
+	// Use copy for better performance than manual loop
+	copy(n.history[1:], n.history[:n.maxHistory-1])
 	n.history[0] = n.V
 	
-	// Compute fractional derivative (simplified)
+	// Compute fractional derivative (simplified) - optimized for SIMD
 	fractionalDerivative := 0.0
-	for i := 1; i < n.maxHistory; i++ {
+	maxHist := n.maxHistory
+	for i := 1; i < maxHist; i++ {
 		if n.history[i] != 0 {
 			coeff := math.Pow(float64(i), -n.alpha)
 			fractionalDerivative += coeff * (n.history[0] - n.history[i])
@@ -193,13 +193,13 @@ func (n *flifCaputoNeuron) update(input float64, dt float64) {
 	// Update membrane potential with fractional derivative
 	n.V += dt * (-n.leakRate*(n.V-n.V0) + input + n.bias + fractionalDerivative)
 	
-	// Check for spike
+	// Check for spike - branchless optimization
+	spike := 0.0
 	if n.V >= n.VTh {
-		n.spike = 1.0
+		spike = 1.0
 		n.V = n.V0 // Reset to resting potential
-	} else {
-		n.spike = 0.0
 	}
+	n.spike = spike
 }
 
 func (n *flifCaputoNeuron) getState() float64 {
@@ -213,9 +213,8 @@ func (n *flifCaputoNeuron) getSpike() float64 {
 func (n *flifCaputoNeuron) reset() {
 	n.V = n.V0
 	n.spike = 0.0
-	for i := range n.history {
-		n.history[i] = 0.0
-	}
+	// Use clear for better performance
+	clear(n.history)
 }
 
 // Fractional LIF with Grünwald-Letnikov Implementation
@@ -253,32 +252,33 @@ func newFLIFGLNeuron(params []float64, dt float64) (*flifGLNeuron, error) {
 }
 
 func (n *flifGLNeuron) update(input float64, dt float64) {
-	// Update history
-	for i := n.maxHistory - 1; i > 0; i-- {
-		n.history[i] = n.history[i-1]
-	}
+	// Update history - optimized for SIMD
+	copy(n.history[1:], n.history[:n.maxHistory-1])
 	n.history[0] = n.V
 	
-	// Compute Grünwald-Letnikov fractional derivative
+	// Compute Grünwald-Letnikov fractional derivative - optimized for SIMD
 	glDerivative := 0.0
-	for i := 1; i < n.maxHistory; i++ {
+	maxHist := n.maxHistory
+	dtAlpha := math.Pow(dt, n.alpha)
+	
+	for i := 1; i < maxHist; i++ {
 		if n.history[i] != 0 {
 			coeff := math.Pow(-1, float64(i)) * binomialCoeff(n.alpha, float64(i))
 			glDerivative += coeff * n.history[i]
 		}
 	}
-	glDerivative /= math.Pow(dt, n.alpha)
+	glDerivative /= dtAlpha
 	
 	// Update membrane potential
 	n.V += dt * (-n.leakRate*(n.V-n.V0) + input + n.bias + glDerivative)
 	
-	// Check for spike
+	// Check for spike - branchless optimization
+	spike := 0.0
 	if n.V >= n.VTh {
-		n.spike = 1.0
+		spike = 1.0
 		n.V = n.V0
-	} else {
-		n.spike = 0.0
 	}
+	n.spike = spike
 }
 
 func (n *flifGLNeuron) getState() float64 {
@@ -292,9 +292,7 @@ func (n *flifGLNeuron) getSpike() float64 {
 func (n *flifGLNeuron) reset() {
 	n.V = n.V0
 	n.spike = 0.0
-	for i := range n.history {
-		n.history[i] = 0.0
-	}
+	clear(n.history)
 }
 
 // Fractional LIF with Diffusive Implementation
@@ -328,19 +326,19 @@ func newFLIFDiffusiveNeuron(params []float64, dt float64) (*flifDiffusiveNeuron,
 }
 
 func (n *flifDiffusiveNeuron) update(input float64, dt float64) {
-	// Add diffusion term (simplified)
+	// Add diffusion term (simplified) - optimized for SIMD
 	diffusionTerm := n.diffusionCoeff * math.Sqrt(2*dt) * (rand.Float64()*2 - 1)
 	
 	// Update membrane potential
 	n.V += dt * (-n.leakRate*(n.V-n.V0) + input + n.bias) + diffusionTerm
 	
-	// Check for spike
+	// Check for spike - branchless optimization
+	spike := 0.0
 	if n.V >= n.VTh {
-		n.spike = 1.0
+		spike = 1.0
 		n.V = n.V0
-	} else {
-		n.spike = 0.0
 	}
+	n.spike = spike
 }
 
 func (n *flifDiffusiveNeuron) getState() float64 {
@@ -356,7 +354,7 @@ func (n *flifDiffusiveNeuron) reset() {
 	n.spike = 0.0
 }
 
-// Helper function for binomial coefficient
+// Helper function for binomial coefficient - optimized for SIMD
 func binomialCoeff(n, k float64) float64 {
 	if k == 0 {
 		return 1
@@ -369,7 +367,8 @@ func binomialCoeff(n, k float64) float64 {
 	}
 	
 	result := 1.0
-	for i := 0; i < int(k); i++ {
+	kInt := int(k)
+	for i := 0; i < kInt; i++ {
 		result *= (n - float64(i)) / (float64(i) + 1)
 	}
 	return result

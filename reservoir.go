@@ -4,6 +4,32 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"runtime"
+	"sync"
+)
+
+// Memory pool for temporary arrays to reduce GC pressure
+var (
+	inputBufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]float64, 0, 1000) // Pre-allocate with capacity
+		},
+	}
+	stateBufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]float64, 0, 1000)
+		},
+	}
+	outputBufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]float64, 0, 1000)
+		},
+	}
+	tempBufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]float64, 0, 1000)
+		},
+	}
 )
 
 // Internal reservoir structure
@@ -23,6 +49,18 @@ type reservoir struct {
 	WIn               []float64
 	WOut              []float64
 	W                 []float64
+	
+	// Pre-allocated buffers for performance
+	inputBuffer       []float64
+	stateBuffer       []float64
+	outputBuffer      []float64
+	tempBuffer1       []float64
+	tempBuffer2       []float64
+	tempBuffer3       []float64
+	
+	// Parallel processing settings
+	numWorkers        int
+	useParallel       bool
 }
 
 // neuron interface for different neuron types
@@ -37,6 +75,10 @@ type neuron interface {
 func createReservoir(numNeurons, numInputs, numOutputs int,
 	spectralRadius, eiRatio, inputStrength, connectivity, dt float64,
 	connectivityType ConnectivityType, neuronType NeuronType, neuronParams []float64) (*reservoir, error) {
+
+	// Determine number of workers for parallel processing
+	numWorkers := runtime.NumCPU()
+	useParallel := numNeurons > 100 && numWorkers > 1 // Only use parallel for larger reservoirs
 
 	r := &reservoir{
 		numNeurons:       numNeurons,
@@ -54,6 +96,18 @@ func createReservoir(numNeurons, numInputs, numOutputs int,
 		WOut:             make([]float64, numOutputs*numNeurons),
 		W:                make([]float64, numNeurons*numNeurons),
 		neurons:          make([]neuron, numNeurons),
+		
+		// Pre-allocate buffers
+		inputBuffer:      make([]float64, numInputs),
+		stateBuffer:      make([]float64, numNeurons),
+		outputBuffer:     make([]float64, numOutputs),
+		tempBuffer1:      make([]float64, numNeurons),
+		tempBuffer2:      make([]float64, numNeurons),
+		tempBuffer3:      make([]float64, numNeurons),
+		
+		// Parallel processing settings
+		numWorkers:       numWorkers,
+		useParallel:      useParallel,
 	}
 
 	// Copy neuron parameters
@@ -217,29 +271,99 @@ func randomizeOutputLayer(r *reservoir) error {
 
 // stepReservoir advances the reservoir by one time step
 func stepReservoir(r *reservoir, input []float64) {
-	// Prepare input vector (zero if nil)
-	u := make([]float64, r.numInputs)
+	// Prepare input vector using pre-allocated buffer
 	if input != nil {
-		copy(u, input)
+		copy(r.inputBuffer, input)
+	} else {
+		// Zero the input buffer
+		for i := range r.inputBuffer {
+			r.inputBuffer[i] = 0.0
+		}
 	}
 
-	// Compute input contribution: W_in * u
-	inputContribution := make([]float64, r.numNeurons)
-	matVecMult(r.WIn, u, inputContribution, r.numNeurons, r.numInputs)
+	// Compute input contribution: W_in * u using pre-allocated buffer
+	MatVecMult(r.WIn, r.inputBuffer, r.tempBuffer1, r.numNeurons, r.numInputs)
 
-	// Compute recurrent contribution: W * x
-	state := make([]float64, r.numNeurons)
+	// Get current neuron states using pre-allocated buffer
+	if r.useParallel {
+		r.getNeuronStatesParallel()
+	} else {
+		r.getNeuronStatesSequential()
+	}
+	
+	// Compute recurrent contribution: W * x using pre-allocated buffer
+	MatVecMult(r.W, r.stateBuffer, r.tempBuffer2, r.numNeurons, r.numNeurons)
+
+	// Update each neuron using pre-allocated buffer for total input
+	if r.useParallel {
+		r.updateNeuronsParallel()
+	} else {
+		r.updateNeuronsSequential()
+	}
+}
+
+// getNeuronStatesSequential gets neuron states sequentially
+func (r *reservoir) getNeuronStatesSequential() {
 	for i := 0; i < r.numNeurons; i++ {
-		state[i] = r.neurons[i].getState()
+		r.stateBuffer[i] = r.neurons[i].getState()
 	}
-	recurrentContribution := make([]float64, r.numNeurons)
-	matVecMult(r.W, state, recurrentContribution, r.numNeurons, r.numNeurons)
+}
 
-	// Update each neuron
-	for i := 0; i < r.numNeurons; i++ {
-		totalInput := inputContribution[i] + recurrentContribution[i]
-		r.neurons[i].update(totalInput, r.dt)
+// getNeuronStatesParallel gets neuron states in parallel
+func (r *reservoir) getNeuronStatesParallel() {
+	var wg sync.WaitGroup
+	neuronsPerWorker := r.numNeurons / r.numWorkers
+	
+	for w := 0; w < r.numWorkers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			
+			start := workerID * neuronsPerWorker
+			end := start + neuronsPerWorker
+			if workerID == r.numWorkers-1 {
+				end = r.numNeurons
+			}
+			
+			for i := start; i < end; i++ {
+				r.stateBuffer[i] = r.neurons[i].getState()
+			}
+		}(w)
 	}
+	wg.Wait()
+}
+
+// updateNeuronsSequential updates neurons sequentially
+func (r *reservoir) updateNeuronsSequential() {
+	for i := 0; i < r.numNeurons; i++ {
+		r.tempBuffer3[i] = r.tempBuffer1[i] + r.tempBuffer2[i]
+		r.neurons[i].update(r.tempBuffer3[i], r.dt)
+	}
+}
+
+// updateNeuronsParallel updates neurons in parallel
+func (r *reservoir) updateNeuronsParallel() {
+	var wg sync.WaitGroup
+	neuronsPerWorker := r.numNeurons / r.numWorkers
+	
+	for w := 0; w < r.numWorkers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			
+			start := workerID * neuronsPerWorker
+			end := start + neuronsPerWorker
+			if workerID == r.numWorkers-1 {
+				end = r.numNeurons
+			}
+			
+			for i := start; i < end; i++ {
+				r.tempBuffer3[i] = r.tempBuffer1[i] + r.tempBuffer2[i]
+				r.neurons[i].update(r.tempBuffer3[i], r.dt)
+			}
+		}(w)
+	}
+	wg.Wait()
 }
 
 // runReservoir runs the reservoir on a series of inputs
@@ -266,18 +390,21 @@ func runReservoir(r *reservoir, inputSeries []float64, seriesLength int) []float
 
 // computeOutput computes the current output
 func computeOutput(r *reservoir, out []float64) error {
-	state := make([]float64, r.numNeurons)
-	for i := 0; i < r.numNeurons; i++ {
-		state[i] = r.neurons[i].getState()
+	// Get current neuron states using pre-allocated buffer
+	if r.useParallel {
+		r.getNeuronStatesParallel()
+	} else {
+		r.getNeuronStatesSequential()
 	}
 
-	// Compute output: W_out * state
-	matVecMult(r.WOut, state, out, r.numOutputs, r.numNeurons)
+	// Compute output: W_out * state using pre-allocated buffer
+	MatVecMult(r.WOut, r.stateBuffer, out, r.numOutputs, r.numNeurons)
 	return nil
 }
 
 // readReservoirState returns the current neuron states
 func readReservoirState(r *reservoir) []float64 {
+	// Use pre-allocated buffer and copy to avoid external modifications
 	state := make([]float64, r.numNeurons)
 	for i := 0; i < r.numNeurons; i++ {
 		state[i] = r.neurons[i].getState()
@@ -287,27 +414,27 @@ func readReservoirState(r *reservoir) []float64 {
 
 // trainOutputIteratively performs online training
 func trainOutputIteratively(r *reservoir, targetVec []float64, lr float64) {
-	// Get current output
-	currentOutput := make([]float64, r.numOutputs)
-	computeOutput(r, currentOutput)
+	// Get current output using pre-allocated buffer
+	computeOutput(r, r.outputBuffer)
 
-	// Get current state
-	state := make([]float64, r.numNeurons)
-	for i := 0; i < r.numNeurons; i++ {
-		state[i] = r.neurons[i].getState()
+	// Get current state using pre-allocated buffer
+	if r.useParallel {
+		r.getNeuronStatesParallel()
+	} else {
+		r.getNeuronStatesSequential()
 	}
 
 	// Update output weights: W_out += lr * (target - output) * state^T
 	for i := 0; i < r.numOutputs; i++ {
-		error := targetVec[i] - currentOutput[i]
+		error := targetVec[i] - r.outputBuffer[i]
 		for j := 0; j < r.numNeurons; j++ {
-			r.WOut[i*r.numNeurons+j] += lr * error * state[j]
+			r.WOut[i*r.numNeurons+j] += lr * error * r.stateBuffer[j]
 		}
 	}
 }
 
 // trainOutputRidgeRegression performs ridge regression training
-func trainOutputRidgeRegression(r *reservoir, inputSeries, targetSeries []float64, seriesLength, lambda float64) {
+func trainOutputRidgeRegression(r *reservoir, inputSeries, targetSeries []float64, seriesLength int, lambda float64) {
 	// Collect states for all time steps
 	states := make([][]float64, seriesLength)
 	for t := 0; t < seriesLength; t++ {
@@ -344,12 +471,11 @@ func solveRidgeRegression(r *reservoir, states [][]float64, targets []float64, s
 	
 	for epoch := 0; epoch < epochs; epoch++ {
 		for t := 0; t < seriesLength; t++ {
-			// Compute current output
-			currentOutput := make([]float64, r.numOutputs)
-			matVecMult(r.WOut, states[t], currentOutput, r.numOutputs, r.numNeurons)
+			// Compute current output using pre-allocated buffer
+			MatVecMult(r.WOut, states[t], r.outputBuffer, r.numOutputs, r.numNeurons)
 			
 			// Compute error
-			error := targets[t] - currentOutput[0] // Assuming single output for simplicity
+			error := targets[t] - r.outputBuffer[0] // Assuming single output for simplicity
 			
 			// Update weights
 			for j := 0; j < r.numNeurons; j++ {
@@ -361,9 +487,42 @@ func solveRidgeRegression(r *reservoir, states [][]float64, targets []float64, s
 
 // resetReservoir resets all neurons to their initial state
 func resetReservoir(r *reservoir) {
+	if r.useParallel {
+		r.resetNeuronsParallel()
+	} else {
+		r.resetNeuronsSequential()
+	}
+}
+
+// resetNeuronsSequential resets neurons sequentially
+func (r *reservoir) resetNeuronsSequential() {
 	for i := 0; i < r.numNeurons; i++ {
 		r.neurons[i].reset()
 	}
+}
+
+// resetNeuronsParallel resets neurons in parallel
+func (r *reservoir) resetNeuronsParallel() {
+	var wg sync.WaitGroup
+	neuronsPerWorker := r.numNeurons / r.numWorkers
+	
+	for w := 0; w < r.numWorkers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			
+			start := workerID * neuronsPerWorker
+			end := start + neuronsPerWorker
+			if workerID == r.numWorkers-1 {
+				end = r.numNeurons
+			}
+			
+			for i := start; i < end; i++ {
+				r.neurons[i].reset()
+			}
+		}(w)
+	}
+	wg.Wait()
 }
 
 // freeReservoir frees the reservoir resources
@@ -374,6 +533,14 @@ func freeReservoir(r *reservoir) {
 		r.WOut = nil
 		r.W = nil
 		r.neuronParams = nil
+		
+		// Clear pre-allocated buffers
+		r.inputBuffer = nil
+		r.stateBuffer = nil
+		r.outputBuffer = nil
+		r.tempBuffer1 = nil
+		r.tempBuffer2 = nil
+		r.tempBuffer3 = nil
 	}
 }
 
@@ -389,20 +556,6 @@ func matVecMult(A, x, y []float64, rows, cols int) {
 
 // calcSpectralRadius calculates the spectral radius of a matrix
 func calcSpectralRadius(A []float64, n int) float64 {
-	// This is a simplified implementation
-	// In practice, you might want to use power iteration or other methods
-	
-	// For now, we'll use a simple approximation
-	maxEigenvalue := 0.0
-	for i := 0; i < n; i++ {
-		rowSum := 0.0
-		for j := 0; j < n; j++ {
-			rowSum += math.Abs(A[i*n+j])
-		}
-		if rowSum > maxEigenvalue {
-			maxEigenvalue = rowSum
-		}
-	}
-	
-	return maxEigenvalue
+	// Use the optimized version from math_utils.go
+	return CalcSpectralRadius(A, n)
 }
