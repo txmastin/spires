@@ -129,6 +129,46 @@ size_t spires_num_neurons(const spires_reservoir *r);
 size_t spires_num_inputs(const spires_reservoir *r);
 size_t spires_num_outputs(const spires_reservoir *r);
 
+
+/* --------------------------
+ *  Optimizer stuff
+ *  ------------------------- */
+
+struct spires_opt_budget {
+	double	data_fraction;    /* 0..1 */
+	int	num_seeds;
+	double	time_limit_sec;   /* 0 = no limit */
+	int	_reserved_i0;
+	double	_reserved_d0;
+};
+
+enum spires_metric_kind { SPIRES_METRIC_AUROC = 0, SPIRES_METRIC_AUPRC = 1 };
+
+struct spires_opt_score {
+	double	lambda_var;       /* penalty on std(metric) */
+	double	lambda_cost;      /* penalty on cost proxy */
+	int	metric;           /* enum spires_metric_kind */
+	int	_reserved_i0;
+};
+
+struct spires_opt_result {
+	spires_reservoir_config  best_config;
+        double                   best_log10_ridge;
+	double	                 best_score;   /* mean − λ_var*std − λ_cost*cost */
+	double	                 metric_mean;
+	double	                 metric_std;
+};
+
+int spires_optimize(const spires_reservoir_config *base_config,
+                    const struct spires_opt_budget *budgets,
+		    int num_budgets,
+		    const struct spires_opt_score *score,
+		    struct spires_opt_result *out,
+                    const double *input_series,
+		    const double *target_series,
+		    size_t series_length);
+
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

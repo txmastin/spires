@@ -21,6 +21,8 @@ SRCS := \
   $(SRC_DIR)/neuron.c     \
   $(SRC_DIR)/reservoir.c  \
   $(SRC_DIR)/spires_api.c \
+  $(SRC_DIR)/agile.c \
+  $(SRC_DIR)/spires_opt_agile.c \
   $(wildcard $(NEURON_DIR)/*.c)
 
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
