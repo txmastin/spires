@@ -1,7 +1,6 @@
 /*
  * spires_opt_agile.c - SPIRES hyperparameter optimization via AGILE
  *
- * SPDX-License-Identifier: MIT
  */
 
 #include "spires_opt_agile.h"
@@ -60,7 +59,7 @@ static void theta_to_params(const double *th, struct spires_opt_params *p)
 /* Bounds for AGILE (same order as theta). */
 static void fill_bounds(double *lo, double *hi)
 {
-	lo[0] = 0.20;  hi[0] = 0.80;  /* alpha */
+	lo[0] = 0.05;  hi[0] = 1.0;  /* alpha */
 	lo[1] = 0.75;  hi[1] = 1.05;  /* spectral_radius */
 	lo[2] = 0.20;  hi[2] = 1.50;  /* input_gain */
 	lo[3] = 0.08;  hi[3] = 0.35;  /* connectivity */
