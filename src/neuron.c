@@ -2,6 +2,13 @@
 #include<stdlib.h>
 #include "neuron.h"
 
+/***** small helper function for exiting *****/
+static void _handle_unknown_neuron_type(const char *function_name)
+{
+    fprintf(stderr, "ERROR in %s: Neuron type unavailable. Exiting gracefully.\n", function_name);
+    exit(EXIT_FAILURE);
+}
+
 void* init_neuron(enum neuron_type type, double *neuron_params, double dt) 
 {
     void* neuron = NULL;
@@ -22,8 +29,7 @@ void* init_neuron(enum neuron_type type, double *neuron_params, double dt)
             neuron = (struct flif_diffusive_neuron *)init_flif_diffusive(neuron_params, dt);
             break;
         default:
-            fprintf(stderr, "Neuron type unavailable. Exiting gracefully.\n");
-            exit(EXIT_FAILURE);
+            _handle_unknown_neuron_type(__func__);
     }
     return neuron;
 }
@@ -48,8 +54,7 @@ void update_neuron(void *neuron, enum neuron_type type, double input, double dt)
             update_flif_diffusive((struct flif_diffusive_neuron *)neuron, input, dt);
             break;
         default:
-            fprintf(stderr, "Neuron type unavailable. Exiting gracefully.\n");
-            exit(EXIT_FAILURE);
+            _handle_unknown_neuron_type(__func__);
     }
 }
 
@@ -73,8 +78,7 @@ double get_neuron_state(void *neuron, enum neuron_type type)
             val = ((struct flif_diffusive_neuron *)neuron)->V;
             break;
         default:
-            fprintf(stderr, "Neuron type unavailable. Exiting gracefully.\n");
-            exit(EXIT_FAILURE);
+            _handle_unknown_neuron_type(__func__);
     }
     return val;
 }
@@ -99,8 +103,7 @@ double get_neuron_spike(void *neuron, enum neuron_type type)
             spike = ((struct flif_diffusive_neuron *)neuron)->spike;
             break;
         default:
-            fprintf(stderr, "Neuron type unavailable. Exiting gracefully.\n");
-            exit(EXIT_FAILURE);
+            _handle_unknown_neuron_type(__func__);
     }
     return spike;
 }
