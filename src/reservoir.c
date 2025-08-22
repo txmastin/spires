@@ -38,6 +38,7 @@ struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t
     reservoir->neuron_type = neuron_type;
     reservoir->neuron_params = neuron_params;
     
+    
     reservoir->neurons = malloc(num_neurons * sizeof(void*));
     
     if (!(reservoir->neurons)) {
@@ -46,9 +47,14 @@ struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t
         return NULL;
     }
 
+    void *local_shared_neuron_data = NULL; // set to NULL to start, optionally change it during neuron instantiation
+    
+    #pragma omp parallel for // parallelizable because race conditions are handled by init_neuron
     for (size_t i = 0; i < num_neurons; i++) {
-        reservoir->neurons[i] = init_neuron(neuron_type, neuron_params, dt); 
+        reservoir->neurons[i] = init_neuron(neuron_type, neuron_params, dt, &local_shared_neuron_data); 
     }
+    
+    reservoir->shared_neuron_data = local_shared_neuron_data; // malloc'd in function if flif_gl is used, must free
 
     return reservoir;
 }
@@ -255,6 +261,11 @@ void free_reservoir(struct reservoir *reservoir)
         free_neuron(reservoir->neurons[i], reservoir->neuron_type);
         reservoir->neurons[i] = NULL;
     }
+
+    if (reservoir->neuron_type == FLIF_GL && reservoir->shared_neuron_data != NULL) {
+		free(reservoir->shared_neuron_data);
+	}
+
     free(reservoir->neurons);
     free(reservoir->W_in);
     free(reservoir->W_out);
@@ -646,9 +657,9 @@ void reset_reservoir(struct reservoir *reservoir)
     if (reservoir == NULL) {
         fprintf(stderr, "Error resetting reservoir. Reservoir not initialized!\n");
     }
-
+    void *local_ptr = reservoir->shared_neuron_data;
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         free_neuron(reservoir->neurons[i], reservoir->neuron_type);
-        reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params, reservoir->dt);
+        reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params, reservoir->dt, &local_ptr);
     }
 }

@@ -16,7 +16,7 @@ enum neuron_type {
     FLIF_DIFFUSIVE
 };
 
-void* init_neuron(enum neuron_type type, double *neuron_params, double dt);
+void* init_neuron(enum neuron_type type, double *neuron_params, double dt, void **shared_neuron_data);
 void update_neuron(void *neuron, enum neuron_type type, double input, double dt);
 void free_neuron(void *neuron, enum neuron_type type);
 double get_neuron_state(void *neuron, enum neuron_type type);

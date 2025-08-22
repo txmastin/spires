@@ -4,17 +4,7 @@
 #include "flif_gl.h"
 
 
-// Helper function to compute the GL coefficients
-static void compute_gl_coeffs(double* coeffs_array, double alpha, int N) 
-{
-    if (!coeffs_array) return;
-    coeffs_array[0] = 1.0;
-    for (int k = 1; k < N; k++) {
-        coeffs_array[k] = coeffs_array[k - 1] * (1.0 - (alpha + 1.0) / (float)k);
-    }
-}
-
-struct flif_gl_neuron* init_flif_gl(double* params, double dt) 
+struct flif_gl_neuron *init_flif_gl(double *params, double dt, double *coeffs) 
 {
     struct flif_gl_neuron* n = malloc(sizeof(struct flif_gl_neuron));
     if (!n) return NULL;
@@ -26,8 +16,11 @@ struct flif_gl_neuron* init_flif_gl(double* params, double dt)
     n->V_rest = params[2];
     n->tau_m  = params[3];
     n->alpha  = params[4];
-    double T_mem = params[5]; // Memory duration in ms, from params
+    double T_mem = params[5]; // Memory duration
     n->bias = params[6];
+
+    // copy coeffs:
+    n->coeffs = coeffs;
 
     // Initialize internal state
     n->internal_step = 0;
@@ -39,15 +32,11 @@ struct flif_gl_neuron* init_flif_gl(double* params, double dt)
     if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
 
     n->V_history = malloc(n->mem_len * sizeof(double));
-    n->coeffs    = malloc(n->mem_len * sizeof(double));
 
     // Initialize history buffer to the resting potential
     for (int i = 0; i < n->mem_len; i++) {
         n->V_history[i] = n->V_rest;
     }
-
-    // Pre-compute coefficients for the length of our history buffer
-    compute_gl_coeffs(n->coeffs, n->alpha, n->mem_len);
 
     return n;
 }
@@ -95,6 +84,5 @@ void free_flif_gl(struct flif_gl_neuron* n)
 {
     if (!n) return;
     free(n->V_history);
-    free(n->coeffs);
     free(n);
 }

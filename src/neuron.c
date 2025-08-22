@@ -9,7 +9,18 @@ static void _handle_unknown_neuron_type(const char *function_name)
     exit(EXIT_FAILURE);
 }
 
-void* init_neuron(enum neuron_type type, double *neuron_params, double dt) 
+
+// Helper function to compute the GL coefficients
+static void compute_gl_coeffs(double *coeffs_array, double alpha, int N)
+{
+    if (!coeffs_array) return;
+    coeffs_array[0] = 1.0;
+    for (int k = 1; k < N; k++) {
+        coeffs_array[k] = coeffs_array[k - 1] * (1.0 - (alpha + 1.0) / (float)k);
+    }
+}
+
+void *init_neuron(enum neuron_type type, double *neuron_params, double dt, void **shared_neuron_data) 
 {
     void* neuron = NULL;
     switch(type) {
@@ -23,7 +34,23 @@ void* init_neuron(enum neuron_type type, double *neuron_params, double dt)
             neuron = (struct flif_caputo_neuron *)init_flif_caputo(neuron_params, dt);
             break;
         case FLIF_GL:
-            neuron = (struct flif_gl_neuron *)init_flif_gl(neuron_params, dt);
+            #pragma omp critical
+            {
+                if (*shared_neuron_data == NULL) {
+                    const double alpha = neuron_params[4];
+                    const double T_mem = neuron_params[5]; 
+                    int mem_len = (T_mem > 0 && dt > 0) ? (int)(T_mem / dt) : 2000;
+                    double *coeffs_arr = malloc(mem_len * sizeof(*coeffs_arr));
+                    if (coeffs_arr != NULL) {
+                        compute_gl_coeffs(coeffs_arr, alpha, mem_len);
+                        *shared_neuron_data = coeffs_arr;
+                    } else {
+                        fprintf(stderr, "Error allocating memory to fractional memory trace. Exiting!");
+                        exit(EXIT_FAILURE);
+                    }
+                }
+            }
+            neuron = (struct flif_gl_neuron *)init_flif_gl(neuron_params, dt, *shared_neuron_data);
             break;
         case FLIF_DIFFUSIVE:
             neuron = (struct flif_diffusive_neuron *)init_flif_diffusive(neuron_params, dt);

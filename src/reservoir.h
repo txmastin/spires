@@ -22,6 +22,7 @@ struct reservoir {
     double *W_in;
     double *W_out;
     double *W;
+    double *shared_neuron_data; // optionally used in some neuron types
     enum connectivity_type connectivity_type;
     enum neuron_type neuron_type;
     double *neuron_params;

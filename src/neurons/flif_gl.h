@@ -26,7 +26,7 @@ struct flif_gl_neuron {
 };
 
 // Function Prototypes
-struct flif_gl_neuron* init_flif_gl(double* params, double dt);
+struct flif_gl_neuron* init_flif_gl(double* params, double dt, double *coeffs);
 void update_flif_gl(struct flif_gl_neuron* n, double input, double dt);
 void free_flif_gl(struct flif_gl_neuron* n);
 
