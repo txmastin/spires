@@ -5,3 +5,4 @@ bin/
 # Ignore object files and dependency files
 *.o
 *.d
+*.swp
