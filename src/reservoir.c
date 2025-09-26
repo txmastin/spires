@@ -199,7 +199,19 @@ double compute_activity(struct reservoir *reservoir)
     return total_activity;
 }
 
-// return the neuron->V for each neuron
+// reads the neuron->V for each neuron into buffer
+void read_reservoir_state(struct reservoir *reservoir, double *buffer) 
+{
+    if (buffer == NULL)
+        fprintf(stderr, "Error reading reservoir state, buffer uninitialized\n");
+
+    for (size_t i = 0; i < reservoir->num_neurons; i++) {
+        buffer[i] = get_neuron_state(reservoir->neurons[i], reservoir->neuron_type);
+    }
+}
+
+
+// copies the neuron->V for each neuron into state
 double *copy_reservoir_state(struct reservoir *reservoir) 
 {
     double *state = malloc(reservoir->num_neurons * sizeof(double));

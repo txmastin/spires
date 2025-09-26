@@ -150,6 +150,16 @@ double *spires_copy_reservoir_state(spires_reservoir *r)
     return copy_reservoir_state(r->impl);
 }
 
+spires_status spires_read_reservoir_state(spires_reservoir *r, double *buffer)
+{
+    if (!r || !r->impl || !buffer) {
+        fprintf(stderr, "Error reading reservoir state, buffer not initialized!\n");
+        return SPIRES_ERR_INVALID_ARG;
+    }
+    read_reservoir_state(r->impl, buffer);
+    return SPIRES_OK;
+}
+
 spires_status spires_compute_output(spires_reservoir *r, double *out)
 {
     if (!r || !r->impl || !out)
