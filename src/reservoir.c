@@ -200,7 +200,7 @@ double compute_activity(struct reservoir *reservoir)
 }
 
 // return the neuron->V for each neuron
-double *read_reservoir_state(struct reservoir *reservoir) 
+double *copy_reservoir_state(struct reservoir *reservoir) 
 {
     double *state = malloc(reservoir->num_neurons * sizeof(double));
     if (state == NULL) {
@@ -224,7 +224,7 @@ void train_output_iteratively(struct reservoir *r, double *target_vector, double
     size_t num_outputs = r->num_outputs;
 
     // 1. Get the current state of the reservoir's neurons
-    double *state = read_reservoir_state(r);
+    double *state = copy_reservoir_state(r);
     if (!state) {
         fprintf(stderr, "Error: Failed to read reservoir state.\n");
         return;
@@ -564,7 +564,7 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
         const double *current_input = &input_series[t * num_inputs];
         step_reservoir(reservoir, current_input);
 
-        double *current_state = read_reservoir_state(reservoir); // read_reservoir_state allocates memory
+        double *current_state = copy_reservoir_state(reservoir); // copy_reservoir_state allocates memory
         if (current_state) {
             memcpy(&X[t * num_neurons], current_state, num_neurons * sizeof(double));
             free(current_state); // so we must not forget to free it

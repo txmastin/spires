@@ -142,12 +142,12 @@ spires_status spires_train_ridge(spires_reservoir *r,
 }
 
 /* --------------- state --------------- */
-double *spires_read_state_copy(spires_reservoir *r)
+double *spires_copy_reservoir_state(spires_reservoir *r)
 {
     if (!r || !r->impl)
         return NULL;
     /* backend returns malloc'd buffer; caller must free */
-    return read_reservoir_state(r->impl);
+    return copy_reservoir_state(r->impl);
 }
 
 spires_status spires_compute_output(spires_reservoir *r, double *out)
