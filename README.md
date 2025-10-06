@@ -1,13 +1,11 @@
 Spires is a high performance spiking reservoir library. Spiking reservoirs are class of reservoir computing (RC) systems configured to utilize the temporal dynamics of spiking activity for computation. In general, a spiking reservoir includes $N$ interconnected spiking neurons, such as those based on the leaky integrate-and-fire neuron model, where each neuron integrates input from other respectively connected neurons over time, accumulating
 a membrane potential $v\_i$:
 
-
-$$ v\_i(t+1)=(1-\eta) v\_i(t)+\sum\_{j=1}^{N} W\_{ij} S\_j(t) + \gamma W\_{in,i} u(t), $$
+$$ v_i(t+1)=(1-\eta) v_i(t)+\sum\_{j=1}^{N} W\_{ij} S_j(t) + \gamma W\_{in,i} u(t), $$
 
 where $\eta$ is the leak rate, $S\_j(t)$ are the output spike impulses of other neurons, $\gamma$ is the input strength, $W\_{in,i}$ is the input weight, and $u(t)$ is the input signal.
 
-When the membrane potential $v\_i$  surpasses an activation threshold $\theta$, the neuron transmits an impulse to downstream neurons:
-
+When the membrane potential $v\_i$ surpasses an activation threshold $\theta$, the neuron transmits an impulse to downstream neurons:
 
 $$
 S\_i(t+1) =
@@ -26,7 +24,6 @@ W = \rho \frac{W\_0}{\lambda\_{max}(W\_0)},
 $$
 
 where $W\_0$ is a random weight matrix with a sparse connectivity $c$, $\lambda\_{max}(W\_0)$ is the largest eigenvalue of $W\_0$, and $\rho$ is the desired spectral radius.
-
 
 A readout layer with weights $W_{out}$ maps the high-dimensional, dynamical state of the reservoir into an output $y(t)$:
 
