@@ -14,6 +14,17 @@
 #define NUM_FEATURES 13      // Must match N_MFCC in Python script
 #define SEQUENCE_LENGTH 25   // Must match MAX_LEN in Python script
 
+static inline double bias_from_alpha(double alpha) {
+    const double b_inf = 0.057;   // plateau as alpha→1
+    const double A     = 0.986;   // amplitude at small alpha
+    const double k     = 7.083;   // decay rate
+    double b = b_inf + A * exp(-k * alpha);
+    // clamp to safe bounds
+    if (b < b_inf) b = b_inf;
+    return b;
+}
+
+
 /**
  * @brief Loads the preprocessed features and labels from text files.
  * @param[out] all_features Pointer to store the flattened feature data.
@@ -147,6 +158,7 @@ int argmax(const double *array, size_t size) {
     return max_idx;
 }
 
+
 int main(void) {
     srand(time(NULL));
 
@@ -176,115 +188,123 @@ int main(void) {
     double dt = 0.1;
     double lambda = 0.0; // Ridge regression regularization
 
-    // neuron parameters
-    double fractional_neuron_params[] = {
-        1.0,    // params[0]: V_th
-        0.0,    // params[1]: V_reset
-        0.0,    // params[2]: V_rest
-        20.0,   // params[3]: tau_m
-        0.4,    // params[4]: alpha
-        10.0,   // params[5]: Tmem
-        0.3     // params[6]: bias
-    };
+    FILE *out_file = fopen("accuracy.csv", "a");
 
-    double discrete_neuron_params[] = {
-        0.0, // params[0]: V_0
-        1.0, // params[1]: V_th
-        0.2, // params[2]: leak_rate
-        0.05 // params[3]: bias
-    };
-    spires_neuron_type neuron_type = SPIRES_NEURON_FLIF_GL;
-    double *neuron_params = NULL;
-    switch(neuron_type) {
-        case SPIRES_NEURON_LIF_DISCRETE:
-            neuron_params = discrete_neuron_params;
-            break;
-        case SPIRES_NEURON_FLIF_GL:
-            neuron_params = fractional_neuron_params;
-            break;
-        case SPIRES_NEURON_FLIF_DIFFUSIVE:
-            neuron_params = fractional_neuron_params;
-            break;
-        default:
-            fprintf(stderr, "Error: Could not initialize neuron parameters, neuron type unavailable.\n");
-            break;
-    };
 
-    // --- 3. Create and Initialize Reservoir ---
-    spires_reservoir_config cfg = {
-        .num_neurons      = num_neurons,
-        .num_inputs       = NUM_FEATURES,
-        .num_outputs      = NUM_CLASSES,
-        .spectral_radius  = spectral_radius,
-        .ei_ratio         = ei_ratio,
-        .input_strength   = input_strength,
-        .connectivity     = connectivity,
-        .dt               = dt,
-        .connectivity_type= SPIRES_CONN_SCALE_FREE,
-        .neuron_type      = neuron_type,
-        .neuron_params    = neuron_params        /* your existing double[] */
-    };
+    int trials = 27;
+    
+    for (int i = 0; i < trials; ++i) {
+        for (double alpha = 0.1; alpha < 1.0; alpha += 0.1) {
+            // neuron parameters
+            double fractional_neuron_params[] = {
+                1.0,    // params[0]: V_th
+                0.0,    // params[1]: V_reset
+                0.0,    // params[2]: V_rest
+                20.0,   // params[3]: tau_m
+                alpha,    // params[4]: alpha
+                10.0,   // params[5]: Tmem
+                bias_from_alpha(alpha)     // params[6]: bias
+            };
 
-    spires_reservoir *res = NULL;
-    if (spires_reservoir_create(&cfg, &res) != SPIRES_OK || !res) {
-        fprintf(stderr, "Error: failed to create reservoir\n");
-        return 1;
-    }
+            double discrete_neuron_params[] = {
+                0.0, // params[0]: V_0
+                1.0, // params[1]: V_th
+                0.2, // params[2]: leak_rate
+                0.05 // params[3]: bias
+            };
+            spires_neuron_type neuron_type = SPIRES_NEURON_FLIF_GL;
+            double *neuron_params = NULL;
+            switch(neuron_type) {
+                case SPIRES_NEURON_LIF_DISCRETE:
+                    neuron_params = discrete_neuron_params;
+                    break;
+                case SPIRES_NEURON_FLIF_GL:
+                    neuron_params = fractional_neuron_params;
+                    break;
+                case SPIRES_NEURON_FLIF_DIFFUSIVE:
+                    neuron_params = fractional_neuron_params;
+                    break;
+                default:
+                    fprintf(stderr, "Error: Could not initialize neuron parameters, neuron type unavailable.\n");
+                    break;
+            };
 
-    // --- 4. Train the Reservoir ---
-    // Note: For simplicity, we train on the entire dataset at once.
-    // In a real scenario, you might train on each sample individually.
-    printf("Training reservoir...\n");
-    if (spires_train_ridge(res, train_x, train_y,
-                       NUM_SAMPLES_TRAIN * SEQUENCE_LENGTH, lambda) != SPIRES_OK) {
-        fprintf(stderr, "ridge training failed\n");
-        return 1;
-    }
+            // --- 3. Create and Initialize Reservoir ---
+            spires_reservoir_config cfg = {
+                .num_neurons      = num_neurons,
+                .num_inputs       = NUM_FEATURES,
+                .num_outputs      = NUM_CLASSES,
+                .spectral_radius  = spectral_radius,
+                .ei_ratio         = ei_ratio,
+                .input_strength   = input_strength,
+                .connectivity     = connectivity,
+                .dt               = dt,
+                .connectivity_type= SPIRES_CONN_SCALE_FREE,
+                .neuron_type      = neuron_type,
+                .neuron_params    = neuron_params        /* your existing double[] */
+            };
 
-    printf("Training complete.\n");
+            spires_reservoir *res = NULL;
+            if (spires_reservoir_create(&cfg, &res) != SPIRES_OK || !res) {
+                fprintf(stderr, "Error: failed to create reservoir\n");
+                return 1;
+            }
 
-    // --- 5. Test the Reservoir ---
-    printf("\n--- Running Inference ---\n");
-    int correct_predictions = 0;
-    for (int i = 0; i < NUM_SAMPLES_TEST; i++) {
-        // Get the input sequence for the current test sample
-        const double *current_test_input = &test_x[i * SEQUENCE_LENGTH * NUM_FEATURES];
+            // --- 4. Train the Reservoir ---
+            //printf("Training reservoir...\n");
+            if (spires_train_ridge(res, train_x, train_y,
+                               NUM_SAMPLES_TRAIN * SEQUENCE_LENGTH, lambda) != SPIRES_OK) {
+                fprintf(stderr, "ridge training failed\n");
+                return 1;
+            }
 
-        // Run the reservoir on this sequence
-        // Note: The output is the reservoir's state *after* the final timestep
-        double final_output[NUM_CLASSES];
-        spires_reservoir_reset(res);
-        for (int t = 0; t < SEQUENCE_LENGTH; t++) {
-            const double *input_slice = &current_test_input[t * NUM_FEATURES];
-            spires_step(res, input_slice);
+            //printf("Training complete.\n");
+
+            // --- 5. Test the Reservoir ---
+            //printf("\n--- Running Inference ---\n");
+            int correct_predictions = 0;
+            for (int i = 0; i < NUM_SAMPLES_TEST; i++) {
+                // Get the input sequence for the current test sample
+                const double *current_test_input = &test_x[i * SEQUENCE_LENGTH * NUM_FEATURES];
+
+                // Run the reservoir on this sequence
+                // Note: The output is the reservoir's state *after* the final timestep
+                double final_output[NUM_CLASSES];
+                spires_reservoir_reset(res);
+                for (int t = 0; t < SEQUENCE_LENGTH; t++) {
+                    const double *input_slice = &current_test_input[t * NUM_FEATURES];
+                    spires_step(res, input_slice);
+                }
+                if (spires_compute_output(res, final_output) != SPIRES_OK) {
+                    fprintf(stderr, "compute_output failed\n");
+                    /* handle if you need to */
+                }
+
+                // Get the predicted class
+                int predicted_digit = argmax(final_output, NUM_CLASSES);
+                int actual_digit = test_y[i];
+
+                //printf("Sample %d: Predicted = %d, Actual = %d ", i, predicted_digit, actual_digit);
+                if (predicted_digit == actual_digit) {
+                    //printf("(Correct)\n");
+                    correct_predictions++;
+                } else {
+                    //printf("(Incorrect)\n");
+                }
+            }
+
+            double accuracy = (double)correct_predictions / NUM_SAMPLES_TEST * 100.0;
+            printf("Alpha: %.1f\nFinal Accuracy: %.2f%%\n", alpha, accuracy);
+            fprintf(out_file, "%f, %f\n", alpha, accuracy);
+            spires_reservoir_destroy(res);
         }
-        if (spires_compute_output(res, final_output) != SPIRES_OK) {
-            fprintf(stderr, "compute_output failed\n");
-            /* handle if you need to */
-        }
-
-        // Get the predicted class
-        int predicted_digit = argmax(final_output, NUM_CLASSES);
-        int actual_digit = test_y[i];
-
-        printf("Sample %d: Predicted = %d, Actual = %d ", i, predicted_digit, actual_digit);
-        if (predicted_digit == actual_digit) {
-            printf("(Correct)\n");
-            correct_predictions++;
-        } else {
-            printf("(Incorrect)\n");
-        }
     }
-
-    // --- 6. Print Final Results and Cleanup ---
-    double accuracy = (double)correct_predictions / NUM_SAMPLES_TEST * 100.0;
-    printf("\nFinal Accuracy: %.2f%%\n", accuracy);
-
+    fclose(out_file);
     free(train_x);
     free(train_y);
     free(test_x);
     free(test_y);
-    spires_reservoir_destroy(res);
+    //spires_reservoir_destroy(res);
 
     return 0;
 }

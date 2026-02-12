@@ -115,7 +115,12 @@ spires_status spires_train_ridge(spires_reservoir *r,
 /* Returns a newly malloc'd copy of the current neuron state (length = num_neurons).
  * Caller must free().
  */
-double *spires_read_state_copy(spires_reservoir *r);
+double *spires_copy_reservoir_state(spires_reservoir *r);
+
+/* Reads the current neuron state into a caller-provided buffer
+ * (length = num_neurons). No allocation.
+ */
+spires_status spires_read_reservoir_state(spires_reservoir *r, double *buffer);
 
 /* Compute current readout y = W_out * state (+ b). 
  * Caller provides an array sized to num_outputs. */
