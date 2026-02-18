@@ -91,16 +91,7 @@ spires_status spires_step(spires_reservoir *r, const double *u_t)
     if (!r || !r->impl)
         return SPIRES_ERR_INVALID_ARG;
 
-    double *tmp = NULL;
-    if (u_t) {
-        tmp = malloc(sizeof(double) * r->impl->num_inputs);
-        if (!tmp)
-            return SPIRES_ERR_ALLOC;
-        memcpy(tmp, u_t, sizeof(double) * r->impl->num_inputs);
-    }
-    step_reservoir(r->impl, tmp);
-    if (tmp)
-        free(tmp);
+    step_reservoir(r->impl, u_t);
     return SPIRES_OK;
 }
 

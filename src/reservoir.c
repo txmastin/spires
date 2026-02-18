@@ -104,7 +104,7 @@ double *run_reservoir(struct reservoir *r, double *input_series, size_t input_le
     return output_series;    
 }
 
-void step_reservoir(struct reservoir *r, double *input_vector) 
+void step_reservoir(struct reservoir *r, const double *input_vector) 
 {
     if (!r) {
         fprintf(stderr, "Error running reservoir. Reservoir not initialized!\n");
