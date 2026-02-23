@@ -5,6 +5,16 @@
 #include <stdlib.h>
 #include <alloca.h>
 
+/*
+ * agile.c — AGILE Optimizer (Adaptive Gradient-Informed Lévy Exploration)
+ *
+ * A two-phase stochastic optimizer designed for black-box and noisy objective
+ * functions. Combines Lévy-flight exploration (heavy-tailed random jumps guided
+ * by gradient direction) with a gradient descent refinement pass to escape local
+ * minima while still converging precisely.
+ *
+ */
+
 // ------------------- Tiny RNG (PCG32) -------------------
 // Public domain PCG from O'Neill (minimal variant)
 static inline uint32_t pcg32_next(uint64_t *state)
@@ -21,7 +31,6 @@ static inline double rnd_uniform(uint64_t *state)
     /* Return uniform in [0,1). Using 32-bit mantissa from PCG. */
     return (pcg32_next(state) * (1.0/4294967296.0));
 }
-
 
 // ------------------- Helpers -------------------
 static inline double clamp(double x, double a, double b)
@@ -94,7 +103,6 @@ static void random_unit(double *u, int d, uint64_t *state)
     }
 }
 
-
 // Truncated power‑law (inverse CDF) with exponent mu>1 on [a,b]
 static double sample_powerlaw(double mu, double a, double b, uint64_t *state)
 {
@@ -108,7 +116,6 @@ static double sample_powerlaw(double mu, double a, double b, uint64_t *state)
     
     return x;
 }
-
 
 // SPSA gradient estimate (two‑point)
 static void spsa_grad(const double *theta, const double *lo, 
@@ -140,7 +147,6 @@ static void spsa_grad(const double *theta, const double *lo,
         g_out[i] = scale * delta[i];
     }
 }
-
 
 // Projection helper
 static void project(double *theta, const double *lo, const double *hi, int d, int reflect)
@@ -192,14 +198,11 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         return EXIT_FAILURE;
     }
 
-
     uint64_t rng = opt.seed ? opt.seed : 0xA57B17E5ULL;
-
 
     // Init
     vec_copy(theta, theta0, dim);
     project(theta, lower, upper, dim, opt.reflect_at_bounds);
-
 
     double loss = loss_fn(theta, dim, ctx);
     double best_loss = loss;
@@ -214,6 +217,19 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
 
     int in_refinement = 0;
 
+    double dir_buf[64];  //memory optimization: use stack buffer for small dims to avoid malloc overhead; for large dims, malloc a buffer
+    int dvec_on_heap = (dim > 64);
+    double *dvec = dvec_on_heap ? (double*)malloc((size_t)dim*sizeof(double)) : dir_buf;
+
+    // safety check
+    if(dvec_on_heap && !dvec) {
+        free(theta);
+        free(theta_cand);
+        free(g);
+        fprintf(stderr, "Error allocating memory during optimization. Aborting!\n");
+        return EXIT_FAILURE;
+    }
+
     while(1) {
         total_iters++;
         // Compute gradient (true or SPSA)
@@ -227,28 +243,20 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         }
 
         double gn = vec_norm(g, dim);
-        double dir_buf[64]; // stack fast‑path for small dims
-        double *dvec = (dim <= 64)? dir_buf : (double*)malloc((size_t)dim*sizeof(double));
-        
-        if(gn > 1e-18)
-            vec_scale(dvec, g, -1.0/gn, dim);
-        else
-            random_unit(dvec, dim, &rng);
 
+        (gn > 1e-18 ? vec_scale(dvec, g, -1.0/gn, dim) : random_unit(dvec, dim, &rng));
 
         // Lévy step size
         double eta = sample_powerlaw(opt.mu, opt.eta_min, opt.eta_max, &rng);
-
 
         // Propose candidate
         vec_copy(theta_cand, theta, dim);
         vec_axpy(theta_cand, dvec, eta, dim);
         project(theta_cand, lower, upper, dim, opt.reflect_at_bounds);
 
-
+        // Evaluate candidate
         double cand_loss = loss_fn(theta_cand, dim, ctx);
         total_evals++;
-
 
         if(cand_loss < loss) {
             // Accept move
@@ -256,8 +264,7 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
             loss = cand_loss;
             steps_since_improve = 0;
             patience *= opt.patience_decay;
-
-            
+    
             if (patience < 1.0)
                 patience = 1.0;
             // store best location if improved 
@@ -276,10 +283,6 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
             steps_since_improve++;
         }
 
-
-        if(dim > 64 && dvec) 
-            free(dvec);
-
         // Switch to refinement when budget exhausted
         if(steps_since_improve >= (int)ceil(patience)) {
             if(opt.verbose) {
@@ -295,6 +298,8 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
             break; // safety
     }
 
+    if (dvec_on_heap) 
+        free(dvec);
 
     // ---------------- Refinement phase ----------------
     if(in_refinement) {
@@ -311,7 +316,6 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
                 total_evals += 2;
             }
 
-
             // Gradient descent step
             vec_axpy(theta, g, -opt.refine_step, dim);
             project(theta, lower, upper, dim, opt.reflect_at_bounds);
@@ -321,8 +325,7 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
                 loss = new_loss;
                 if(loss < best_loss){
                     best_loss = loss;
-            best_iter = total_iters;
- 
+                    best_iter = total_iters; 
                     vec_copy(theta_best, theta, dim);
                 }
                 no_improve = 0;
@@ -341,7 +344,6 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         report->total_iters = total_iters;
         report->exited_refinement = in_refinement;
     }
-
 
     free(theta);
     free(theta_cand);

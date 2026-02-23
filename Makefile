@@ -5,10 +5,36 @@ BUILD_DIR    := build
 LIB_DIR      := lib
 
 # -------- tools/flags --------
-CC      := clang
-CFLAGS  := -O2 -Wall -Wextra -Wpedantic -Wshadow -g -fopenmp
+UNAME := $(shell uname -s)
+ifeq ($(OS), Windows_NT)
+    CC        := gcc
+    OMP_FLAGS := -fopenmp
+else ifeq ($(UNAME), Darwin)
+    LLVM_PREFIX := $(shell brew --prefix llvm)
+    CC          := $(LLVM_PREFIX)/bin/clang
+    OMP_FLAGS   := -fopenmp
+else
+    # Linux
+    CC        := clang
+    OMP_FLAGS := -fopenmp
+endif
+
+CFLAGS   := -O2 -Wall -Wextra -Wpedantic -Wshadow -g $(OMP_FLAGS)
 INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR)
-INCLUDES += -I/usr/include/openblas
+
+ifeq ($(OS), Windows_NT)
+    INCLUDES += -I/usr/include/openblas
+else ifeq ($(UNAME), Darwin)
+    INCLUDES += -I$(shell brew --prefix openblas)/include
+else
+    INCLUDES += -I/usr/include/openblas
+endif
+
+# -------- OLD tools/flags --------
+# CC      := clang
+# CFLAGS  := -O2 -Wall -Wextra -Wpedantic -Wshadow -g -fopenmp
+# INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR)
+# INCLUDES += -I/usr/include/openblas
 
 # (Portable option: pkg-config; uncomment if available)
 # LAPACKE_CFLAGS := $(shell pkg-config --cflags lapacke 2>/dev/null)
