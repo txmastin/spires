@@ -13,13 +13,6 @@
  * by gradient direction) with a gradient descent refinement pass to escape local
  * minima while still converging precisely.
  *
- * Phase 1 — Exploration: samples step sizes from a power-law distribution,
- *   accepting only improvements, with a decaying patience budget.
- * Phase 2 — Refinement: gradient descent from the best point found.
- *
- * Gradients are computed via a user-supplied function or SPSA if unavailable.
- * Bounds are enforced at every step via clamping or boundary reflection.
- *
  */
 
 // ------------------- Tiny RNG (PCG32) -------------------
@@ -248,8 +241,6 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
             spsa_grad(theta, lower, upper, dim, opt.spsa_eps, loss_fn, ctx, &rng, g); 
             total_evals += 2; 
         }
-
-        printf("In while(1) loop\n");
 
         double gn = vec_norm(g, dim);
 
