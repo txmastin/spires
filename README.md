@@ -2,7 +2,7 @@
 
 A high-performance spiking reservoir computing library written in C.
 
-Spires provides configurable spiking neural network reservoirs with multiple neuron models — including fractional-order leaky integrate-and-fire neurons — multiple network topologies, and batch/online readout training. It is designed for temporal pattern recognition tasks such as time series prediction, spoken digit classification, and biosignal processing.
+Spires provides configurable spiking neural network reservoirs with multiple neuron models, including fractional-order leaky integrate-and-fire neurons, multiple network topologies, and batch/online readout training. It is designed for temporal pattern recognition tasks such as time series prediction, spoken digit classification, and biosignal processing.
 
 ## Features
 
