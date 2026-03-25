@@ -5,7 +5,7 @@ BUILD_DIR    := build
 LIB_DIR      := lib
 
 # -------- tools/flags --------
-CC      := clang
+CC      := gcc
 CFLAGS  := -O2 -Wall -Wextra -Wpedantic -Wshadow -g -fopenmp
 INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR)
 INCLUDES += -I/usr/include/openblas
