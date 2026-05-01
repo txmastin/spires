@@ -191,28 +191,18 @@ int compute_output(struct reservoir *reservoir, double *output_vector)
     size_t num_neurons = reservoir->num_neurons;
     size_t num_outputs = reservoir->num_outputs;
 
-
-
-    // read the current state of all neurons into a temporary local array.
-    // using a VLA on the stack
-    /*
-    double state[num_neurons];
-    for (size_t i = 0; i < num_neurons; i++) {
-        state[i] = get_neuron_state(reservoir->neurons[i], reservoir->neuron_type);
-    }
-    */
-
-   double *state = copy_reservoir_state(reservoir);
+    double *state = malloc(num_neurons * sizeof(double));
     if (!state) {
-        fprintf(stderr, "Error: failed to copy reservoir state.\n");
+        fprintf(stderr, "Error: failed to allocate state buffer.\n");
         return EXIT_FAILURE;
     }
+    read_reservoir_state(reservoir, state);
 
-    // compute the output vector: output_vector = W_out * state
-    // W_out is a [num_outputs x num_neurons] matrix
     cblas_dgemv(CblasRowMajor, CblasNoTrans,
                 num_outputs, num_neurons, 1.0, reservoir->W_out, num_neurons,
                 state, 1, 0.0, output_vector, 1);
+
+    free(state);
     return EXIT_SUCCESS;
 }
 
@@ -230,10 +220,19 @@ double compute_activity(struct reservoir *reservoir)
 }
 
 // reads the neuron->V for each neuron into buffer
-void read_reservoir_state(struct reservoir *reservoir, double *buffer) 
+void read_reservoir_state(struct reservoir *reservoir, double *buffer)
 {
-    if (buffer == NULL)
+    if (buffer == NULL) {
         fprintf(stderr, "Error reading reservoir state, buffer uninitialized\n");
+        return;
+    }
+
+    #ifdef USE_CUDA
+        if (reservoir->cuda_backend) {
+            cuda_copy_state(reservoir, buffer);
+            return;
+        }
+    #endif
 
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         buffer[i] = get_neuron_state(reservoir->neurons[i], reservoir->neuron_type);
@@ -625,18 +624,23 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
         cuda_init_reservoir(reservoir);
     #endif
 
+    // Single reusable buffer — avoids one malloc/free per timestep.
+    double *state_buf = malloc(num_neurons * sizeof(double));
+    if (!state_buf) {
+        fprintf(stderr, "Failed to allocate memory for state buffer.\n");
+        free(X);
+        return;
+    }
+
     // Run the reservoir and record the state of every neuron at every timestep
     for (size_t t = 0; t < series_length; t++) {
         const double *current_input = &input_series[t * num_inputs];
         step_reservoir(reservoir, current_input);
-
-        double *current_state = copy_reservoir_state(reservoir); // copy_reservoir_state allocates memory
-                                                                 // handles both cpu and cuda 
-        if (current_state) {
-            memcpy(&X[t * num_neurons], current_state, num_neurons * sizeof(double));
-            free(current_state); // so we must not forget to free it
-        }
+        read_reservoir_state(reservoir, state_buf);
+        memcpy(&X[t * num_neurons], state_buf, num_neurons * sizeof(double));
     }
+
+    free(state_buf);
 
         // --- Step 2: Construct the matrices for the normal equation A*W = B ---
     // A = X'X + lambda*I  (size: num_neurons x num_neurons)
