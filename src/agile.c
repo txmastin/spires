@@ -169,7 +169,7 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
     // Defaults
     struct agile_options opt = {
         .mu=1.3, .eta_min=1e-3, .eta_max=5e-1,
-        .patience0=100.0, .patience_decay=0.9,
+        .patience0=100, .patience_decay=0.9,
         .refine_step=0.0, .refine_max_iters=200, .refine_no_improve=30,
         .spsa_eps=1e-3,
         .reflect_at_bounds=1,

@@ -32,8 +32,8 @@ static inline double bias_from_alpha(double alpha) {
  * @return 0 on success, -1 on failure.
  */
 int load_preprocessed_data(double **all_features, int **all_labels) {
-    const char* features_path = "/home/xenos/programming/datasets/free-spoken-digit-dataset/data/spoken_digit_features.txt";
-    const char* labels_path = "/home/xenos/programming/datasets/free-spoken-digit-dataset/data/spoken_digit_labels.txt";
+    const char* features_path = "spoken_digit_features.txt";
+    const char* labels_path = "spoken_digit_labels.txt";
 
     
     printf("Loading data from text files...\n");
@@ -179,7 +179,7 @@ int main(void) {
 
     // --- 2. Setup Reservoir Parameters ---
     printf("Configuring reservoir...\n");
-    size_t num_neurons = 400;
+    size_t num_neurons = 1000;
     double desired_degree = 15;
     double spectral_radius = 0.99;
     double connectivity = desired_degree/((double)num_neurons - 1);
@@ -191,10 +191,10 @@ int main(void) {
     FILE *out_file = fopen("accuracy.csv", "a");
 
 
-    int trials = 27;
+    int trials = 1;
     
     for (int i = 0; i < trials; ++i) {
-        for (double alpha = 0.1; alpha < 1.0; alpha += 0.1) {
+        for (double alpha = 0.2; alpha <= 0.7; alpha += 0.1) {
             // neuron parameters
             double fractional_neuron_params[] = {
                 1.0,    // params[0]: V_th
@@ -249,16 +249,15 @@ int main(void) {
                 fprintf(stderr, "Error: failed to create reservoir\n");
                 return 1;
             }
-
             // --- 4. Train the Reservoir ---
-            //printf("Training reservoir...\n");
+            printf("Training reservoir...\n");
             if (spires_train_ridge(res, train_x, train_y,
                                NUM_SAMPLES_TRAIN * SEQUENCE_LENGTH, lambda) != SPIRES_OK) {
                 fprintf(stderr, "ridge training failed\n");
                 return 1;
             }
 
-            //printf("Training complete.\n");
+            printf("Training complete.\n");
 
             // --- 5. Test the Reservoir ---
             //printf("\n--- Running Inference ---\n");
@@ -274,6 +273,7 @@ int main(void) {
                 for (int t = 0; t < SEQUENCE_LENGTH; t++) {
                     const double *input_slice = &current_test_input[t * NUM_FEATURES];
                     spires_step(res, input_slice);
+                    
                 }
                 if (spires_compute_output(res, final_output) != SPIRES_OK) {
                     fprintf(stderr, "compute_output failed\n");
@@ -296,6 +296,7 @@ int main(void) {
             double accuracy = (double)correct_predictions / NUM_SAMPLES_TEST * 100.0;
             printf("Alpha: %.1f\nFinal Accuracy: %.2f%%\n", alpha, accuracy);
             fprintf(out_file, "%f, %f\n", alpha, accuracy);
+
             spires_reservoir_destroy(res);
         }
     }

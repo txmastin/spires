@@ -26,6 +26,9 @@ struct reservoir {
     enum connectivity_type connectivity_type;
     enum neuron_type neuron_type;
     double *neuron_params;
+
+    //this points to additional reservoir properties used by the GPU
+    void *cuda_backend;
 };
 
 struct reservoir* create_reservoir(

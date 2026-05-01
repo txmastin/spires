@@ -7,11 +7,23 @@
 #include <string.h>
 
 
+
 // Matrix-vector multiplication: y = A * x
 void mat_vec_mult(double *A, double *x, double *y, size_t n)
 {
 	cblas_dgemv(CblasRowMajor, CblasNoTrans,
 		    n, n, 1.0, A, n, x, 1, 0.0, y, 1);
+}
+
+void cblas_mat_vec_mult(struct reservoir *r, const double *input_vector, double *external_inputs)
+{
+    size_t num_neurons = r->num_neurons;
+    size_t num_inputs  = r->num_inputs;
+
+    // W_in * input_vector -> external_inputs
+    cblas_dgemv(CblasRowMajor, CblasNoTrans,
+                num_neurons, num_inputs, r->input_strength, r->W_in, num_inputs,
+                input_vector, 1, 0.0, external_inputs, 1);
 }
 
 /*
@@ -154,12 +166,14 @@ void mat_transpose(double *A, double *A_T, size_t rows, size_t cols)
 void mat_mat_mult(double *A, double *B, double *C,
 		  size_t r1, size_t c1, size_t c2)
 {
+    printf("entering: mat_mat_mul cblas\n");
 	cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
 		    r1, c2, c1,
 		    1.0, A, c1,
 		    B, c2,
 		    0.0, C, c2);
 }
+
 /*
 void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t c2) 
 {

@@ -12,6 +12,9 @@
 #include "spires_opt_agile.h"
 
 
+#include "math_utils.h"
+
+
 /* The public opaque handle wraps a backend pointer. */
 struct spires_reservoir {
     struct reservoir *impl; /* owned */
@@ -20,7 +23,7 @@ struct spires_reservoir {
 /* --------------- lifecycle --------------- */
 spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
                                       spires_reservoir **out_r)
-{
+{	
     if (!cfg || !out_r)
         return SPIRES_ERR_INVALID_ARG;
 
@@ -65,6 +68,7 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
     }
     r->impl = impl;
     *out_r  = r;
+	
     return SPIRES_OK;
 }
 
@@ -72,6 +76,10 @@ void spires_reservoir_destroy(spires_reservoir *r)
 {
     if (!r)
         return;
+	
+	#ifdef USE_CUDA
+		if(r->impl) cuda_free_reservoir(r->impl);
+	#endif
     if (r->impl)
         free_reservoir(r->impl);
     free(r);
@@ -81,6 +89,10 @@ spires_status spires_reservoir_reset(spires_reservoir *r)
 {
     if (!r || !r->impl)
         return SPIRES_ERR_INVALID_ARG;
+
+	#ifdef USE_CUDA
+		cuda_reset_reservoir(r->impl);
+	#endif
     reset_reservoir(r->impl);
     return SPIRES_OK;
 }
@@ -201,7 +213,9 @@ static size_t snap_N(double x)
 static int snap_topo(double t)
 {
     int k = (int)llround(t);
-    if (k < 0) k = 0; if (k > 2) k = 2;
+
+    if (k < 0) { k = 0; }
+	if (k > 2) { k = 2; }
     return k;
 }
 

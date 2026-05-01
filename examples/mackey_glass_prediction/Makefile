@@ -1,6 +1,5 @@
 SPIRES_ROOT ?= ../../
 
-# Detect OS and set compiler + OpenMP flags accordingly
 UNAME := $(shell uname -s)
 ifeq ($(OS), Windows_NT)
     CC        := gcc
@@ -17,14 +16,21 @@ else ifeq ($(UNAME), Darwin)
               -L/opt/homebrew/opt/openblas/lib
 else
     # Linux
-    CC        := clang
+    CC        := gcc
     OMP_FLAGS := -fopenmp
-    OMP_LIBS  := -lomp
+    OMP_LIBS  := -lgomp
     LDLIBS := -L$(SPIRES_ROOT)/lib -lspires -llapacke -lopenblas -lm $(OMP_LIBS)
 endif
 
 CFLAGS  := -O2 -Wall -Wextra -I$(SPIRES_ROOT)/include
 LDFLAGS := $(OMP_FLAGS)
+
+# -------- CUDA toggle --------
+USE_CUDA ?= 0
+ifeq ($(USE_CUDA), 1)
+    CFLAGS  += -DUSE_CUDA
+    LDLIBS  += -lcudart
+endif
 
 BIN_DIR := bin
 SRC     := mackey_glass_prediction.c
@@ -34,7 +40,7 @@ BIN     := $(BIN_DIR)/mackey_glass_prediction
 all: lib $(BIN)
 
 lib:
-	$(MAKE) -C $(SPIRES_ROOT)    # builds lib/libspires.a
+	$(MAKE) -C $(SPIRES_ROOT) USE_CUDA=$(USE_CUDA)   # propagate flag to root Makefile
 
 $(BIN): $(SRC) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
@@ -44,4 +50,3 @@ $(BIN_DIR):
 
 clean:
 	rm -rf $(BIN_DIR)
-

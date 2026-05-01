@@ -7,13 +7,10 @@
 #include <math.h>
 
 // #include "spires.h"
-#include "reservoir.h"
+// #include "reservoir.h"
 #include "math_utils.h"
 
-
-
 /* **** create reservoir ***** */
-
 struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t num_outputs, 
                                 double spectral_radius, double ei_ratio, double input_strength, 
                                 double connectivity, double dt, enum connectivity_type connectivity_type, 
@@ -59,6 +56,7 @@ struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t
     return reservoir;
 }
 
+
 int init_reservoir(struct reservoir *r) 
 {
     if (r == NULL) {
@@ -68,6 +66,13 @@ int init_reservoir(struct reservoir *r)
     init_weights(r);
     rescale_weights(r);
     randomize_output_layer(r);
+
+    /*
+    #if USE_CUDA
+        r->cuda_backend = cuda_init_reservoir(r);
+    #endif
+    */
+
     return EXIT_SUCCESS;
 }
 
@@ -104,7 +109,7 @@ double *run_reservoir(struct reservoir *r, double *input_series, size_t input_le
     return output_series;    
 }
 
-void step_reservoir(struct reservoir *r, const double *input_vector) 
+void cpu_step_reservoir(struct reservoir *r, const double *input_vector) 
 {
     if (!r) {
         fprintf(stderr, "Error running reservoir. Reservoir not initialized!\n");
@@ -125,10 +130,17 @@ void step_reservoir(struct reservoir *r, const double *input_vector)
     // --- Pre-calculate constant external inputs for this entire macro step ---
     double external_inputs[num_neurons];
     // W_in * input_vector
+
     cblas_dgemv(CblasRowMajor, CblasNoTrans,
                 num_neurons, num_inputs, r->input_strength, r->W_in, num_inputs,
                 input_vector, 1, 0.0, external_inputs, 1);
-    
+
+   //runs cuda version if compiled with cuda
+   //runs cpu version otherwise 
+   /*
+    cblas_mat_vec_mult(r, input_vector, external_inputs);
+    */
+
 
     // --- Double buffer to hold spikes, which evolve at the micro-step scale ---
     // doubled for parallel computation / preventing race conditions
@@ -138,6 +150,7 @@ void step_reservoir(struct reservoir *r, const double *input_vector)
     for (size_t i = 0; i < num_neurons; i++) {
         last_spikes[i] = get_neuron_spike(r->neurons[i], r->neuron_type);
     }
+
 
     // --- Internal simulation loop (the "micro-steps") ---
     for (int t = 0; t < num_micro_steps; t++) {
@@ -149,14 +162,21 @@ void step_reservoir(struct reservoir *r, const double *input_vector)
 
             // Calculate the dot product: recurrent_input = W_row • last_spikes
             double recurrent_input = cblas_ddot(num_neurons, W_row, 1, last_spikes, 1);
-
             double total_input = external_inputs[i] + recurrent_input;
             update_neuron(r->neurons[i], r->neuron_type, total_input, r->dt);
             new_spikes[i] = get_neuron_spike(r->neurons[i], r->neuron_type);
         }
-
         memcpy(last_spikes, new_spikes, num_neurons * sizeof(double)); 
     }
+}
+
+void step_reservoir(struct reservoir *r, const double *input_vector)
+{
+    #if USE_CUDA
+        cuda_step_reservoir(r, input_vector);
+    #else
+        cpu_step_reservoir(r, input_vector);
+    #endif
 }
 
 
@@ -171,11 +191,21 @@ int compute_output(struct reservoir *reservoir, double *output_vector)
     size_t num_neurons = reservoir->num_neurons;
     size_t num_outputs = reservoir->num_outputs;
 
+
+
     // read the current state of all neurons into a temporary local array.
     // using a VLA on the stack
+    /*
     double state[num_neurons];
     for (size_t i = 0; i < num_neurons; i++) {
         state[i] = get_neuron_state(reservoir->neurons[i], reservoir->neuron_type);
+    }
+    */
+
+   double *state = copy_reservoir_state(reservoir);
+    if (!state) {
+        fprintf(stderr, "Error: failed to copy reservoir state.\n");
+        return EXIT_FAILURE;
     }
 
     // compute the output vector: output_vector = W_out * state
@@ -219,6 +249,14 @@ double *copy_reservoir_state(struct reservoir *reservoir)
         fprintf(stderr, "Memory allocation error for reservoir state\n");
         return NULL;
     }
+
+    #ifdef USE_CUDA
+        if (reservoir->cuda_backend) {
+            cuda_copy_state(reservoir, state);
+            return state;
+        }
+    #endif
+
     for (size_t i = 0; i < reservoir->num_neurons; i++) {
         state[i] = get_neuron_state(reservoir->neurons[i], reservoir->neuron_type);
     }
@@ -259,8 +297,18 @@ void train_output_iteratively(struct reservoir *r, double *target_vector, double
         cblas_daxpy(num_neurons, lr * error, state, 1, w_out_row, 1);
     }
 
+    #ifdef USE_CUDA
+        if(state) {
+            printf("Freeing cuda res\n");
+           cuda_free_reservoir(r);
+        }
+        return;
+    #endif
+
     // Clean up the allocated state vector
     free(state);
+
+
 }
 
 void free_reservoir(struct reservoir *reservoir) 
@@ -571,19 +619,26 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     }
     
     reset_reservoir(reservoir);
+
+    //pre-allocate memory for CUDA
+    #ifdef USE_CUDA
+        cuda_init_reservoir(reservoir);
+    #endif
+
     // Run the reservoir and record the state of every neuron at every timestep
     for (size_t t = 0; t < series_length; t++) {
         const double *current_input = &input_series[t * num_inputs];
         step_reservoir(reservoir, current_input);
 
         double *current_state = copy_reservoir_state(reservoir); // copy_reservoir_state allocates memory
+                                                                 // handles both cpu and cuda 
         if (current_state) {
             memcpy(&X[t * num_neurons], current_state, num_neurons * sizeof(double));
             free(current_state); // so we must not forget to free it
         }
     }
 
-    // --- Step 2: Construct the matrices for the normal equation A*W = B ---
+        // --- Step 2: Construct the matrices for the normal equation A*W = B ---
     // A = X'X + lambda*I  (size: num_neurons x num_neurons)
     // B = X'Y             (size: num_neurons x 1)
 
@@ -661,6 +716,67 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     free(X);
     free(X_T);
     free(A);
+}
+
+void debug_dump_and_exit(struct reservoir *r, const double *input_vector, const char *tag)
+{
+    fprintf(stderr, "\n========== STATE DUMP [%s] ==========\n", tag);
+    fprintf(stderr, "N=%zu  M=%zu  dt=%.6f  input_strength=%.6f\n",
+            r->num_neurons, r->num_inputs, r->dt, r->input_strength);
+
+    /* --- Input vector (so we know what was fed in) --- */
+    fprintf(stderr, "input_vector[0..%zu]:\n  ",
+            r->num_inputs > 8 ? 8 : r->num_inputs);
+    for (size_t i = 0; i < (r->num_inputs > 8 ? 8 : r->num_inputs); ++i)
+        fprintf(stderr, "% .6e ", input_vector[i]);
+    fprintf(stderr, "\n");
+
+    /* --- W_in checksum (catches upload mismatches) --- */
+    double w_in_sum = 0.0, w_in_abs = 0.0;
+    for (size_t i = 0; i < r->num_neurons * r->num_inputs; ++i) {
+        w_in_sum += r->W_in[i];
+        w_in_abs += fabs(r->W_in[i]);
+    }
+    fprintf(stderr, "W_in:  sum=% .9e  sum|.|=% .9e\n", w_in_sum, w_in_abs);
+
+    /* --- W checksum (catches scaling mismatches) --- */
+    double w_sum = 0.0, w_abs = 0.0;
+    for (size_t i = 0; i < r->num_neurons * r->num_neurons; ++i) {
+        w_sum += r->W[i];
+        w_abs += fabs(r->W[i]);
+    }
+    fprintf(stderr, "W:     sum=% .9e  sum|.|=% .9e\n", w_sum, w_abs);
+
+    /* --- State vector (V from each neuron) --- */
+    double *state = copy_reservoir_state(r);
+    if (state) {
+        const size_t print_n = r->num_neurons > 16 ? 16 : r->num_neurons;
+        fprintf(stderr, "V[0..%zu]:\n  ", print_n);
+        for (size_t i = 0; i < print_n; ++i)
+            fprintf(stderr, "% .9e ", state[i]);
+        fprintf(stderr, "\n");
+
+        /* Whole-vector summary so we don't miss anything past the first 16 */
+        double s_sum = 0.0, s_abs = 0.0, s_max = -1e308, s_min = 1e308;
+        size_t nz = 0;
+        for (size_t i = 0; i < r->num_neurons; ++i) {
+            s_sum += state[i];
+            s_abs += fabs(state[i]);
+            if (state[i] > s_max) s_max = state[i];
+            if (state[i] < s_min) s_min = state[i];
+            if (state[i] != 0.0) ++nz;
+        }
+        fprintf(stderr, "V summary:  sum=% .9e  sum|.|=% .9e  min=% .6e  max=% .6e  nonzero=%zu/%zu\n",
+                s_sum, s_abs, s_min, s_max, nz, r->num_neurons);
+
+        free(state);
+    } else {
+        fprintf(stderr, "copy_reservoir_state returned NULL\n");
+    }
+
+    fprintf(stderr, "========================================\n");
+    fflush(stderr);
+    exit(0);
 }
 
 // Function to reset neurons in reservoir (helpful for fractional order neuron models)

@@ -40,7 +40,7 @@ struct flif_gl_neuron *init_flif_gl(double *params, double dt, double *coeffs)
 
     return n;
 }
-
+/*
 void update_flif_gl(struct flif_gl_neuron* n, double input, double dt) 
 {
     // Reset spike from the previous micro-step
@@ -77,6 +77,38 @@ void update_flif_gl(struct flif_gl_neuron* n, double input, double dt)
     n->V_history[head] = n->V;
 
     // Increment the neuron's internal micro-step counter
+    n->internal_step++;
+}
+*/
+
+void update_flif_gl(struct flif_gl_neuron* n, double input, double dt) {
+    if (n->spike == 1.0) n->spike = 0.0;
+
+    const int mem_len  = n->mem_len; // local var is faster to access
+    const int head     = n->internal_step % mem_len;
+    const int prev_idx = (head == 0) ? mem_len - 1 : head - 1;
+
+    double history = 0.0;
+    const int limit = (n->internal_step < mem_len) ? n->internal_step : mem_len - 1;
+
+    int idx = prev_idx;
+    for (int k = 1; k <= limit; k++) {
+        history += n->coeffs[k] * n->V_history[idx];
+        if (--idx < 0) idx = mem_len - 1; //cheaper version of modulo operation
+    }
+
+    const double rhs = (-(n->V_history[prev_idx] - n->V_rest) / n->tau_m)
+                       + input + n->bias;
+
+    const double dt_alpha = pow(dt, n->alpha);
+    n->V = dt_alpha * rhs - history;
+
+    if (n->V >= n->V_th) {
+        n->V     = n->V_reset;
+        n->spike = 1.0;
+    }
+
+    n->V_history[head] = n->V;
     n->internal_step++;
 }
 

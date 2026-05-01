@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <time.h> 
+
 /* ---- Helpers: discrete projection for relaxed vars ---- */
 
 static int round_N(double n_cont)
@@ -115,9 +117,19 @@ static double spires_loss_fn(const double *theta, int dim, void *ctxp)
 	p.n_cont = round_N(p.n_cont);
 	p.topo_cont = round_topology(p.topo_cont);
 
+	struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
 	rc = ctx->eval(&p, ctx->budget, ctx->user_ctx, &mean, &std, &cost, &feasible);
 	if (rc != 0 || !feasible)
 		return 1e6; /* heavy penalty */
+
+	clock_gettime(CLOCK_MONOTONIC, &t1);
+    double elapsed = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+
+    printf("[LOSS] eval returned: rc=%d feasible=%d mean=%.4f std=%.4f cost=%.4f (%.3fs)\n",
+           rc, feasible, mean, std, cost, elapsed);
+    fflush(stdout);
 
 	return -make_score(mean, std, cost, ctx->sopt);
 }

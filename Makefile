@@ -4,18 +4,19 @@ NEURON_DIR   := $(SRC_DIR)/neurons
 BUILD_DIR    := build
 LIB_DIR      := lib
 
-# -------- tools/flags --------
+# -------- tools/flags based on operating system --------
 UNAME := $(shell uname -s)
 ifeq ($(OS), Windows_NT)
     CC        := gcc
     OMP_FLAGS := -fopenmp
-else ifeq ($(UNAME), Darwin)
+else ifeq ($(UNAME), Darwin) 
+    # Mac
     LLVM_PREFIX := $(shell brew --prefix llvm)
     CC          := $(LLVM_PREFIX)/bin/clang
     OMP_FLAGS   := -fopenmp
 else
     # Linux
-    CC        := clang
+    CC        := gcc
     OMP_FLAGS := -fopenmp
 endif
 
@@ -41,36 +42,61 @@ endif
 # OPENBLAS_CFLAGS:= $(shell pkg-config --cflags openblas 2>/dev/null)
 # INCLUDES += $(LAPACKE_CFLAGS) $(OPENBLAS_CFLAGS)
 
-# -------- sources/objects --------
-SRCS := \
-  $(SRC_DIR)/math_utils.c \
-  $(SRC_DIR)/neuron.c     \
-  $(SRC_DIR)/reservoir.c  \
-  $(SRC_DIR)/spires_api.c \
-  $(SRC_DIR)/agile.c \
-  $(SRC_DIR)/spires_opt_agile.c \
-  $(wildcard $(NEURON_DIR)/*.c)
 
-OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+#--------- CUDA toggle ------------
+USE_CUDA ?= 0
+
+ifeq ($(USE_CUDA),1)
+    NVCC      := nvcc
+    NVCCFLAGS := -O2 -g -Xcompiler "-Wall -Wextra"
+    CFLAGS    += -DUSE_CUDA
+
+    CU_SRCS := $(SRC_DIR)/math_utils.cu
+    CU_OBJS := $(BUILD_DIR)/math_utils_cu.o
+
+    C_SRCS := \
+      $(SRC_DIR)/neuron.c           \
+      $(SRC_DIR)/reservoir.c        \
+      $(SRC_DIR)/spires_api.c       \
+      $(SRC_DIR)/agile.c            \
+      $(SRC_DIR)/spires_opt_agile.c \
+      $(wildcard $(NEURON_DIR)/*.c)
+
+else
+    CU_OBJS :=
+
+    C_SRCS := \
+      $(SRC_DIR)/math_utils.c       \
+      $(SRC_DIR)/neuron.c           \
+      $(SRC_DIR)/reservoir.c        \
+      $(SRC_DIR)/spires_api.c       \
+      $(SRC_DIR)/agile.c            \
+      $(SRC_DIR)/spires_opt_agile.c \
+      $(wildcard $(NEURON_DIR)/*.c)
+
+endif
+
+OBJS := $(C_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(CU_OBJS)
 
 STATIC_LIB := $(LIB_DIR)/libspires.a
 
-# -------- default targets --------
 .PHONY: all library clean
 all: library
 library: $(STATIC_LIB)
 
-# Archive rule — ensure lib/ exists first (order-only prerequisite)
 $(STATIC_LIB): $(OBJS) | $(LIB_DIR)
 	@echo "  AR    $@"
 	ar rcs $@ $(OBJS)
 
-# Compile C -> object (handles nested dirs; creates build subdirs)
+# -------- compile rules --------
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# Directory creators (real file targets, not phony)
+$(BUILD_DIR)/math_utils_cu.o: $(SRC_DIR)/math_utils.cu | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
+
 $(BUILD_DIR):
 	mkdir -p $@
 $(LIB_DIR):
