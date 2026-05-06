@@ -194,7 +194,7 @@ int main(void) {
     int trials = 27;
     
     for (int i = 0; i < trials; ++i) {
-        for (double alpha = 0.1; alpha < 1.0; alpha += 0.1) {
+        for (double alpha = 0.45; alpha < 0.55; alpha += 0.01) {
             // neuron parameters
             double fractional_neuron_params[] = {
                 1.0,    // params[0]: V_th
@@ -294,7 +294,7 @@ int main(void) {
             }
 
             double accuracy = (double)correct_predictions / NUM_SAMPLES_TEST * 100.0;
-            printf("Alpha: %.1f\nFinal Accuracy: %.2f%%\n", alpha, accuracy);
+            printf("Alpha: %.2f\nFinal Accuracy: %.2f%%\n", alpha, accuracy);
             fprintf(out_file, "%f, %f\n", alpha, accuracy);
             spires_reservoir_destroy(res);
         }

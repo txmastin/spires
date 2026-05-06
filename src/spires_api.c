@@ -151,6 +151,14 @@ spires_status spires_read_reservoir_state(spires_reservoir *r, double *buffer)
     return SPIRES_OK;
 }
 
+spires_status spires_read_spike_state(spires_reservoir *r, double *buffer)
+{
+    if (!r || !r->impl || !buffer)
+        return SPIRES_ERR_INVALID_ARG;
+    read_reservoir_spikes(r->impl, buffer);
+    return SPIRES_OK;
+}
+
 spires_status spires_compute_output(spires_reservoir *r, double *out)
 {
     if (!r || !r->impl || !out)

@@ -122,6 +122,12 @@ double *spires_copy_reservoir_state(spires_reservoir *r);
  */
 spires_status spires_read_reservoir_state(spires_reservoir *r, double *buffer);
 
+/* Reads the current spike state (0.0 or 1.0 per neuron) into a caller-provided
+ * buffer (length = num_neurons). Call immediately after spires_step to get
+ * spikes from that timestep. No allocation.
+ */
+spires_status spires_read_spike_state(spires_reservoir *r, double *buffer);
+
 /* Compute current readout y = W_out * state (+ b). 
  * Caller provides an array sized to num_outputs. */
 spires_status spires_compute_output(spires_reservoir *r, double *out);

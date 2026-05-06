@@ -65,12 +65,12 @@ int main(void)
     }
 
     /* ---- Generate Mackey–Glass ---- */
-    size_t timesteps = 1000;
-    double x0 = 0.1;
-    double tau = 17;       // Must be > 17 for chaos
-    double beta = 0.2;
-    double gamma = 0.1;
-    int n = 10;
+    size_t timesteps = 200;
+    double x0 = 0.2;
+    double tau = 22;       // Must be > 17 for chaos
+    double beta = 0.4;
+    double gamma = 0.2;
+    int n = 11;
 
     double *input_series = malloc(timesteps * sizeof(double));
     if (input_series == NULL) {
@@ -85,7 +85,7 @@ int main(void)
     int rc;
     const size_t Din  = 1;  /* Mackey–Glass is scalar input */
     const size_t Dout = 1;  /* predict next value */
-    const size_t horizon = 84;
+    const size_t horizon = 2;
 
     const size_t series_length  = timesteps - horizon;
     
@@ -111,58 +111,35 @@ int main(void)
         0.0,            // V_reset
         0.0,            // V_rest
         20.0,           // tau_m
-        0.7,            // alpha
+        1.0,            // alpha
         (double)timesteps, // Tmem
         0.1             // bias
     };
     
     /* Base config (“ball-park” defaults) */
     spires_reservoir_config base = {
-            .num_neurons       = 100,
+            .num_neurons       = 400,
             .num_inputs        = Din,
             .num_outputs       = Dout,
-            .spectral_radius   = 0.90,
-            .ei_ratio          = 0.80,
+            .spectral_radius   = 0.99,
+            .ei_ratio          = 0.50,
             .input_strength    = 1.00,
-            .connectivity      = 0.20,
+            .connectivity      = 0.2,
             .dt                = 0.1,
             .connectivity_type = SPIRES_CONN_RANDOM,
             .neuron_type       = SPIRES_NEURON_FLIF_GL,
             .neuron_params     = fractional_neuron_params,   /* alpha will be set internally by optimizer */
     };
 
-    /* Two-stage budget: quick pass on half data, then full data */
-    struct spires_opt_budget buds[] = {
-            { .data_fraction = 0.8, .num_seeds = 1, .time_limit_sec = 0.0 },
-    };
-    struct spires_opt_score score = {
-            .lambda_var  = 0.0,
-            .lambda_cost = 0.0,
-            .metric      = SPIRES_METRIC_AUROC, /* placeholder; optimizer uses 1/(1+MSE) internally */
-    };
-    struct spires_opt_result out;
-
-    /* Optimize hyperparameters using your task data */
-    rc = spires_optimize(&base, buds, (int)(sizeof(buds)/sizeof(buds[0])),
-                         &score, &out,
-                         /* input  */ input_series,   /* flattened [T x Din]  */
-                         /* target */ target_series,  /* flattened [T x Dout] */
-                         /* T */     T);
-    if (rc) {
-            fprintf(stderr, "spires_optimize failed (rc=%d)\n", rc);
-            free(target_series);
-            return 1;
-    }
-
     /* Train final reservoir with the best config and ridge on ALL T samples */
     spires_reservoir *R = NULL;
-    if (spires_reservoir_create(&out.best_config, &R) != SPIRES_OK || !R) {
+    if (spires_reservoir_create(&base, &R) != SPIRES_OK || !R) {
             fprintf(stderr, "failed to create reservoir\n");
             free(target_series);
             return 1;
     }
 
-    const double lambda = pow(10.0, out.best_log10_ridge);
+    const double lambda = pow(10.0, 0.1);
     if (spires_train_ridge(R, input_series, target_series, T, lambda) != SPIRES_OK) {
             fprintf(stderr, "ridge training failed\n");
             spires_reservoir_destroy(R);

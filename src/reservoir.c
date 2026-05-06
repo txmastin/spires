@@ -211,8 +211,19 @@ void read_reservoir_state(struct reservoir *reservoir, double *buffer)
 }
 
 
+// reads the spike state (0.0 or 1.0) for each neuron into buffer
+void read_reservoir_spikes(struct reservoir *reservoir, double *buffer)
+{
+    if (buffer == NULL) {
+        fprintf(stderr, "Error reading spike state, buffer uninitialized\n");
+        return;
+    }
+    for (size_t i = 0; i < reservoir->num_neurons; i++)
+        buffer[i] = get_neuron_spike(reservoir->neurons[i], reservoir->neuron_type);
+}
+
 // copies the neuron->V for each neuron into state
-double *copy_reservoir_state(struct reservoir *reservoir) 
+double *copy_reservoir_state(struct reservoir *reservoir)
 {
     double *state = malloc(reservoir->num_neurons * sizeof(double));
     if (state == NULL) {
