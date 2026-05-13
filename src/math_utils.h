@@ -28,6 +28,10 @@ void cuda_free_reservoir(struct reservoir *r);
 void cuda_copy_state(struct reservoir *r, double *out);
 void call_peek();
 void cuda_reset_reservoir(struct reservoir *r);
+void cuda_alloc_state_buffer(struct reservoir *r, size_t series_length);
+void cuda_collect_state(struct reservoir *r, size_t t);
+void cuda_get_state_buffer(struct reservoir *r, double *h_X, size_t series_length);
+void cuda_free_state_buffer(struct reservoir *r);
 #endif
 
 #ifdef __cplusplus

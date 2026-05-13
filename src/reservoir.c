@@ -622,25 +622,39 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     //pre-allocate memory for CUDA
     #ifdef USE_CUDA
         cuda_init_reservoir(reservoir);
+        cuda_alloc_state_buffer(reservoir, series_length);
     #endif
 
-    // Single reusable buffer — avoids one malloc/free per timestep.
+    // CPU path: single reusable buffer avoids one malloc/free per timestep.
+    #ifndef USE_CUDA
     double *state_buf = malloc(num_neurons * sizeof(double));
     if (!state_buf) {
         fprintf(stderr, "Failed to allocate memory for state buffer.\n");
         free(X);
         return;
     }
+    #endif
 
-    // Run the reservoir and record the state of every neuron at every timestep
+    // Run the reservoir and record the state of every neuron at every timestep.
+    // CUDA path: states are collected via async D2D copies (no CPU sync per step).
+    // CPU path: reads state to host and memcpy into X each step.
     for (size_t t = 0; t < series_length; t++) {
         const double *current_input = &input_series[t * num_inputs];
         step_reservoir(reservoir, current_input);
-        read_reservoir_state(reservoir, state_buf);
-        memcpy(&X[t * num_neurons], state_buf, num_neurons * sizeof(double));
+        #ifdef USE_CUDA
+            cuda_collect_state(reservoir, t);
+        #else
+            read_reservoir_state(reservoir, state_buf);
+            memcpy(&X[t * num_neurons], state_buf, num_neurons * sizeof(double));
+        #endif
     }
 
-    free(state_buf);
+    #ifdef USE_CUDA
+        cuda_get_state_buffer(reservoir, X, series_length);
+        cuda_free_state_buffer(reservoir);
+    #else
+        free(state_buf);
+    #endif
 
         // --- Step 2: Construct the matrices for the normal equation A*W = B ---
     // A = X'X + lambda*I  (size: num_neurons x num_neurons)

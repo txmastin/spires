@@ -43,6 +43,8 @@ struct cuda_backend {
     double *d_input_vector, *d_external_inputs, *d_recurrent;
     double *d_spikes_a, *d_spikes_b;
     double *d_V_history;
+    double *d_X;           // training state matrix [series_length × N], device-side
+    size_t  X_series_len;
 
     // Uniform scalar parameters
     double V_rest, V_th, V_reset, tau_m, bias, alpha, dt_alpha;
@@ -290,6 +292,49 @@ extern "C" void cuda_reset_reservoir(struct reservoir *r)
     cb->internal_step = 0;
 }
 
+extern "C" void cuda_alloc_state_buffer(struct reservoir *r, size_t series_length)
+{
+    struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
+    const size_t N = r->num_neurons;
+    CUDA_CHECK(cudaMalloc(&cb->d_X, series_length * N * sizeof(double)));
+    cb->X_series_len = series_length;
+}
+
+// Device-to-device async copy: writes current V into row t of d_X (no CPU sync).
+extern "C" void cuda_collect_state(struct reservoir *r, size_t t)
+{
+    struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
+    const size_t N = r->num_neurons;
+    const int last_head = (cb->internal_step - 1 + cb->mem_len) % cb->mem_len;
+    CUDA_CHECK(cudaMemcpyAsync(
+        cb->d_X + t * N,
+        cb->d_V_history + (size_t)last_head * N,
+        N * sizeof(double),
+        cudaMemcpyDeviceToDevice,
+        cb->stream));
+}
+
+// Single host sync + D2H copy for the entire collected state matrix.
+extern "C" void cuda_get_state_buffer(struct reservoir *r, double *h_X, size_t series_length)
+{
+    struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
+    const size_t N = r->num_neurons;
+    CUDA_CHECK(cudaStreamSynchronize(cb->stream));
+    CUDA_CHECK(cudaMemcpy(h_X, cb->d_X,
+                          series_length * N * sizeof(double),
+                          cudaMemcpyDeviceToHost));
+}
+
+extern "C" void cuda_free_state_buffer(struct reservoir *r)
+{
+    struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
+    if (cb->d_X) {
+        cudaFree(cb->d_X);
+        cb->d_X = NULL;
+        cb->X_series_len = 0;
+    }
+}
+
 extern "C" void cuda_free_reservoir(struct reservoir *r)
 {
     printf("calling cuda free res\n");
@@ -304,6 +349,7 @@ extern "C" void cuda_free_reservoir(struct reservoir *r)
     cudaFree(cb->d_spikes_a);
     cudaFree(cb->d_spikes_b);
     cudaFree(cb->d_V_history);
+    cudaFree(cb->d_X);
     cudaFree(cb->host_spikes);
 
     cublasDestroy(cb->cublas);
