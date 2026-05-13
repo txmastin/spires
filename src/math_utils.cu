@@ -9,8 +9,8 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
-#define MAX_LEN 2048 
-__constant__ double c_coeffs[MAX_LEN];
+#define MAX_LEN 2048
+__constant__ float c_coeffs[MAX_LEN];
 
 #define TILE_SIZE 32 // for tiled cuda kernel
 
@@ -39,15 +39,14 @@ __constant__ double c_coeffs[MAX_LEN];
     }
 
 struct cuda_backend {
-    double *d_W, *d_W_in;
-    double *d_input_vector, *d_external_inputs, *d_recurrent;
-    double *d_spikes_a, *d_spikes_b;
-    double *d_V_history;
-    double *d_X;           // training state matrix [series_length × N], device-side
-    size_t  X_series_len;
+    float *d_W, *d_W_in;
+    float *d_input_vector, *d_external_inputs, *d_recurrent;
+    float *d_spikes_a, *d_spikes_b;
+    float *d_V_history;
+    float *d_X;           // training state matrix [series_length × N], device-side
+    size_t X_series_len;
 
-    // Uniform scalar parameters
-    double V_rest, V_th, V_reset, tau_m, bias, alpha, dt_alpha;
+    float V_rest, V_th, V_reset, tau_m, bias, alpha, dt_alpha;
 
     int mem_len;
     int internal_step;
@@ -58,23 +57,23 @@ struct cuda_backend {
     cudaStream_t   stream;
 };
 
-__global__ void fill_double_kernel(double *p, double v, size_t n)
+__global__ void fill_float_kernel(float *p, float v, size_t n)
 {
     size_t i = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
     if (i < n) p[i] = v;
 }
 
 __global__ void update_flif_gl_kernel(
-    const double * __restrict__ external_inputs, // [N]
-    const double * __restrict__ recurrent,       // [N]
-    double       * __restrict__ V_history,       // [mem_len x N], time-major
-    double       * __restrict__ next_spikes,     // [N]  output
-    double V_rest,
-    double V_th,
-    double V_reset,
-    double tau_m,
-    double bias,
-    double dt_alpha,
+    const float * __restrict__ external_inputs, // [N]
+    const float * __restrict__ recurrent,       // [N]
+    float       * __restrict__ V_history,       // [mem_len x N], time-major
+    float       * __restrict__ next_spikes,     // [N]  output
+    float V_rest,
+    float V_th,
+    float V_reset,
+    float tau_m,
+    float bias,
+    float dt_alpha,
     int head,       // current write slot in circular buffer
     int prev_idx,   // slot containing V_{n-1}
     int limit,      // how many history steps are valid
@@ -85,29 +84,26 @@ __global__ void update_flif_gl_kernel(
     if (i >= N) return;
 
     // --- 1. History term: sum_{k=1}^{limit} c_k * V_{n-k,i} ---
-    // Walk backwards through the circular buffer.
-    // c_coeffs lives in __constant__ memory — one broadcast read per k.
-    double history = 0.0;
+    float history = 0.0f;
     int idx = prev_idx;
     for (int k = 1; k <= limit; ++k) {
-        // V_history is time-major: neuron i at time slot idx is [idx*N + i]
         history += c_coeffs[k] * V_history[(size_t)idx * N + i];
         idx = (idx == 0) ? mem_len - 1 : idx - 1;
     }
 
     // --- 2. RHS of the fractional LIF equation ---
-    const double V_prev = V_history[(size_t)prev_idx * N + i];
-    const double rhs = -(V_prev - V_rest) / tau_m
+    const float V_prev = V_history[(size_t)prev_idx * N + i];
+    const float rhs = -(V_prev - V_rest) / tau_m
                      + external_inputs[i] + recurrent[i] + bias;
 
-    // --- 3. GL direct update (Eq. 15) ---
-    double V = dt_alpha * rhs - history;
+    // --- 3. GL direct update ---
+    float V = dt_alpha * rhs - history;
 
     // --- 4. Spike and reset ---
-    double spike = 0.0;
+    float spike = 0.0f;
     if (V >= V_th) {
         V     = V_reset;
-        spike = 1.0;
+        spike = 1.0f;
     }
 
     // --- 5. Write outputs ---
@@ -122,8 +118,8 @@ extern "C" void call_peek()
 
 extern "C" void cuda_init_reservoir(struct reservoir *r)
 {
-    cudaFree(0);                  // benign call that triggers init
-    cudaGetLastError();           
+    cudaFree(0);
+    cudaGetLastError();
     PEEK("cuda_init_reservoir start");
 
     struct cuda_backend *cb = (struct cuda_backend *)calloc(1, sizeof *cb);
@@ -132,15 +128,14 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
     const size_t N = r->num_neurons;
     const size_t M = r->num_inputs;
 
-    // Pull scalar params from neuron[0] — uniform across all neurons per paper.
     struct flif_gl_neuron *n0 = (struct flif_gl_neuron *)r->neurons[0];
-    cb->V_th    = n0->V_th;
-    cb->V_reset = n0->V_reset;
-    cb->V_rest  = n0->V_rest;
-    cb->tau_m   = n0->tau_m;
-    cb->bias    = n0->bias;
-    cb->alpha   = n0->alpha;
-    cb->dt_alpha = pow(r->dt, n0->alpha);
+    cb->V_th    = (float)n0->V_th;
+    cb->V_reset = (float)n0->V_reset;
+    cb->V_rest  = (float)n0->V_rest;
+    cb->tau_m   = (float)n0->tau_m;
+    cb->bias    = (float)n0->bias;
+    cb->alpha   = (float)n0->alpha;
+    cb->dt_alpha = (float)pow(r->dt, n0->alpha);
     cb->mem_len  = n0->mem_len;
     cb->internal_step = 0;
 
@@ -150,41 +145,49 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
         exit(1);
     }
 
-    // Upload GL coefficients to __constant__ memory (one broadcast, free at runtime)
-    CUDA_CHECK(cudaMemcpyToSymbol(c_coeffs, n0->coeffs,
-                                  n0->mem_len * sizeof(double)));
+    // Convert GL coefficients to float and upload to __constant__ memory
+    float *coeffs_f = (float *)malloc(n0->mem_len * sizeof(float));
+    for (int k = 0; k < n0->mem_len; k++) coeffs_f[k] = (float)n0->coeffs[k];
+    CUDA_CHECK(cudaMemcpyToSymbol(c_coeffs, coeffs_f, n0->mem_len * sizeof(float)));
+    free(coeffs_f);
 
+    CUDA_CHECK(cudaMallocHost(&cb->host_spikes, N * sizeof(double)));
 
-    CUDA_CHECK(cudaMallocHost(&cb->host_spikes, N * sizeof(double))); 
+    // Allocate float weight matrices on device
+    CUDA_CHECK(cudaMalloc(&cb->d_W,    N * N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_W_in, N * M * sizeof(float)));
 
-    // Allocate and upload weight matrices
-    CUDA_CHECK(cudaMalloc(&cb->d_W,    N * N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&cb->d_W_in, N * M * sizeof(double)));
-    CUDA_CHECK(cudaMemcpy(cb->d_W,    r->W,    N*N*sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(cb->d_W_in, r->W_in, N*M*sizeof(double), cudaMemcpyHostToDevice));
+    // Convert and upload W (double → float)
+    float *W_f = (float *)malloc(N * N * sizeof(float));
+    for (size_t k = 0; k < N * N; k++) W_f[k] = (float)r->W[k];
+    CUDA_CHECK(cudaMemcpy(cb->d_W, W_f, N * N * sizeof(float), cudaMemcpyHostToDevice));
+    free(W_f);
 
-    // Allocate scratch buffers
-    CUDA_CHECK(cudaMalloc(&cb->d_input_vector,    M * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&cb->d_external_inputs, N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&cb->d_recurrent,       N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&cb->d_spikes_a,        N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&cb->d_spikes_b,        N * sizeof(double)));
+    // Convert and upload W_in (double → float)
+    float *W_in_f = (float *)malloc(N * M * sizeof(float));
+    for (size_t k = 0; k < N * M; k++) W_in_f[k] = (float)r->W_in[k];
+    CUDA_CHECK(cudaMemcpy(cb->d_W_in, W_in_f, N * M * sizeof(float), cudaMemcpyHostToDevice));
+    free(W_in_f);
+
+    // Allocate float scratch buffers
+    CUDA_CHECK(cudaMalloc(&cb->d_input_vector,    M * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_external_inputs, N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_recurrent,       N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_spikes_a,        N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_spikes_b,        N * sizeof(float)));
 
     // V_history: time-major [mem_len x N], init to V_rest
-    CUDA_CHECK(cudaMalloc(&cb->d_V_history, (size_t)cb->mem_len * N * sizeof(double)));
-
-    // Initialize V_history to V_rest on device
-    // Easiest: fill a host buffer and upload
-    double *tmp = (double *)malloc((size_t)cb->mem_len * N * sizeof(double));
+    CUDA_CHECK(cudaMalloc(&cb->d_V_history, (size_t)cb->mem_len * N * sizeof(float)));
+    float *tmp = (float *)malloc((size_t)cb->mem_len * N * sizeof(float));
     for (size_t k = 0; k < (size_t)cb->mem_len * N; k++) tmp[k] = cb->V_rest;
     CUDA_CHECK(cudaMemcpy(cb->d_V_history, tmp,
-                          (size_t)cb->mem_len * N * sizeof(double),
+                          (size_t)cb->mem_len * N * sizeof(float),
                           cudaMemcpyHostToDevice));
     free(tmp);
 
     // Initial spikes = 0
-    CUDA_CHECK(cudaMemset(cb->d_spikes_a, 0, N * sizeof(double)));
-    CUDA_CHECK(cudaMemset(cb->d_spikes_b, 0, N * sizeof(double)));
+    CUDA_CHECK(cudaMemset(cb->d_spikes_a, 0, N * sizeof(float)));
+    CUDA_CHECK(cudaMemset(cb->d_spikes_b, 0, N * sizeof(float)));
 
     // cuBLAS and stream
     CUDA_CHECK(cudaStreamCreate(&cb->stream));
@@ -192,53 +195,51 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
     CUBLAS_CHECK(cublasSetStream(cb->cublas, cb->stream));
 
     r->cuda_backend = cb;
-
 }
 
 extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vector)
 {
-
     struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
     const int    micro_steps = (int)llround(1.0 / r->dt);
     const int    N = (int)r->num_neurons;
     const int    M = (int)r->num_inputs;
-    const double zero = 0.0, one = 1.0;
-    const double input_strength = r->input_strength;
+    const float  zero_f = 0.0f, one_f = 1.0f;
+    const float  input_strength_f = (float)r->input_strength;
 
-    // host -> device
-    CUDA_CHECK(cudaMemcpyAsync(cb->d_input_vector, input_vector,
-                               M * sizeof(double),
+    // Convert input vector double → float and upload
+    float input_f[M];
+    for (int j = 0; j < M; j++) input_f[j] = (float)input_vector[j];
+    CUDA_CHECK(cudaMemcpyAsync(cb->d_input_vector, input_f,
+                               M * sizeof(float),
                                cudaMemcpyHostToDevice, cb->stream));
 
-    CUBLAS_CHECK(cublasDgemv(cb->cublas, CUBLAS_OP_T,
-                             M, N,              // (rows, cols) of the col-major matrix
-                             &input_strength,
-                             cb->d_W_in, M,     // lda = M (row stride of row-major W_in)
+    CUBLAS_CHECK(cublasSgemv(cb->cublas, CUBLAS_OP_T,
+                             M, N,
+                             &input_strength_f,
+                             cb->d_W_in, M,
                              cb->d_input_vector, 1,
-                             &zero,
+                             &zero_f,
                              cb->d_external_inputs, 1));
 
-    double *last = cb->d_spikes_a;
-    double *next = cb->d_spikes_b;
+    float *last = cb->d_spikes_a;
+    float *next = cb->d_spikes_b;
     const int threads = 256;
     const int blocks  = (N + threads - 1) / threads;
 
     for (int t = 0; t < micro_steps; ++t) {
 
-        CUBLAS_CHECK(cublasDgemv(cb->cublas, CUBLAS_OP_T,
+        CUBLAS_CHECK(cublasSgemv(cb->cublas, CUBLAS_OP_T,
                                  N, N,
-                                 &one,
+                                 &one_f,
                                  cb->d_W, N,
                                  last, 1,
-                                 &zero,
+                                 &zero_f,
                                  cb->d_recurrent, 1));
 
-        // Circular buffer indices
         const int head     = cb->internal_step % cb->mem_len;
         const int prev_idx = (head == 0) ? cb->mem_len - 1 : head - 1;
         const int limit    = (cb->internal_step < cb->mem_len)
                              ? cb->internal_step : cb->mem_len - 1;
-
 
         update_flif_gl_kernel<<<blocks, threads, 0, cb->stream>>>(
             cb->d_external_inputs, cb->d_recurrent,
@@ -247,19 +248,18 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
             cb->tau_m, cb->bias, cb->dt_alpha,
             head, prev_idx, limit, cb->mem_len, N);
 
-        CUDA_CHECK(cudaGetLastError());  // catch launch errors immediately
+        CUDA_CHECK(cudaGetLastError());
 
         cb->internal_step++;
 
-        // Swap buffers (no copy, just pointer swap)
-        double *tmp = last; last = next; next = tmp;
+        float *tmp = last; last = next; next = tmp;
     }
 
-    // Persist buffer assignments for next macro step
     cb->d_spikes_a = last;
     cb->d_spikes_b = next;
 }
 
+// Copies current reservoir state (float) to host buffer (double).
 extern "C" void cuda_copy_state(struct reservoir *r, double *out)
 {
     struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
@@ -268,10 +268,14 @@ extern "C" void cuda_copy_state(struct reservoir *r, double *out)
         (cb->internal_step - 1 + cb->mem_len) % cb->mem_len;
 
     CUDA_CHECK(cudaStreamSynchronize(cb->stream));
-    CUDA_CHECK(cudaMemcpy(out,
+
+    float *tmp_f = (float *)malloc(N * sizeof(float));
+    CUDA_CHECK(cudaMemcpy(tmp_f,
                           cb->d_V_history + (size_t)last_head * N,
-                          N * sizeof(double),
+                          N * sizeof(float),
                           cudaMemcpyDeviceToHost));
+    for (size_t k = 0; k < N; k++) out[k] = (double)tmp_f[k];
+    free(tmp_f);
 }
 
 extern "C" void cuda_reset_reservoir(struct reservoir *r)
@@ -281,13 +285,12 @@ extern "C" void cuda_reset_reservoir(struct reservoir *r)
     const size_t N = r->num_neurons;
     const size_t total = (size_t)cb->mem_len * N;
 
-    /* fill V_history with V_rest using a small kernel — avoids host scratch */
-    fill_double_kernel<<<(total + 255) / 256, 256, 0, cb->stream>>>(
+    fill_float_kernel<<<(total + 255) / 256, 256, 0, cb->stream>>>(
         cb->d_V_history, cb->V_rest, total);
     CUDA_CHECK(cudaGetLastError());
 
-    CUDA_CHECK(cudaMemsetAsync(cb->d_spikes_a, 0, N * sizeof(double), cb->stream));
-    CUDA_CHECK(cudaMemsetAsync(cb->d_spikes_b, 0, N * sizeof(double), cb->stream));
+    CUDA_CHECK(cudaMemsetAsync(cb->d_spikes_a, 0, N * sizeof(float), cb->stream));
+    CUDA_CHECK(cudaMemsetAsync(cb->d_spikes_b, 0, N * sizeof(float), cb->stream));
 
     cb->internal_step = 0;
 }
@@ -296,7 +299,7 @@ extern "C" void cuda_alloc_state_buffer(struct reservoir *r, size_t series_lengt
 {
     struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
     const size_t N = r->num_neurons;
-    CUDA_CHECK(cudaMalloc(&cb->d_X, series_length * N * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&cb->d_X, series_length * N * sizeof(float)));
     cb->X_series_len = series_length;
 }
 
@@ -309,20 +312,24 @@ extern "C" void cuda_collect_state(struct reservoir *r, size_t t)
     CUDA_CHECK(cudaMemcpyAsync(
         cb->d_X + t * N,
         cb->d_V_history + (size_t)last_head * N,
-        N * sizeof(double),
+        N * sizeof(float),
         cudaMemcpyDeviceToDevice,
         cb->stream));
 }
 
-// Single host sync + D2H copy for the entire collected state matrix.
+// Single host sync + D2H copy, with float → double conversion for CPU ridge regression.
 extern "C" void cuda_get_state_buffer(struct reservoir *r, double *h_X, size_t series_length)
 {
     struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
     const size_t N = r->num_neurons;
     CUDA_CHECK(cudaStreamSynchronize(cb->stream));
-    CUDA_CHECK(cudaMemcpy(h_X, cb->d_X,
-                          series_length * N * sizeof(double),
+
+    float *h_X_f = (float *)malloc(series_length * N * sizeof(float));
+    CUDA_CHECK(cudaMemcpy(h_X_f, cb->d_X,
+                          series_length * N * sizeof(float),
                           cudaMemcpyDeviceToHost));
+    for (size_t k = 0; k < series_length * N; k++) h_X[k] = (double)h_X_f[k];
+    free(h_X_f);
 }
 
 extern "C" void cuda_free_state_buffer(struct reservoir *r)
@@ -350,7 +357,7 @@ extern "C" void cuda_free_reservoir(struct reservoir *r)
     cudaFree(cb->d_spikes_b);
     cudaFree(cb->d_V_history);
     cudaFree(cb->d_X);
-    cudaFree(cb->host_spikes);
+    cudaFreeHost(cb->host_spikes);
 
     cublasDestroy(cb->cublas);
     cudaStreamDestroy(cb->stream);
@@ -383,11 +390,9 @@ extern "C" double calc_spectral_radius(double *A, size_t n)
 
 	unsigned int iter;
 	for (iter = 0; iter < max_iter; iter++) {
-		/* y = A * x */
 		cblas_dgemv(CblasRowMajor, CblasNoTrans,
 			    n, n, 1.0, A, n, x, 1, 0.0, y, 1);
 
-		/* Estimate largest magnitude component (Rayleigh estimate) */
 		lambda_new = 0.0;
 		for (i = 0; i < n; i++) {
 			double abs_y = fabs(y[i]);
@@ -395,11 +400,9 @@ extern "C" double calc_spectral_radius(double *A, size_t n)
 				lambda_new = abs_y;
 		}
 
-		/* Normalize y -> x */
 		for (i = 0; i < n; i++)
 			x[i] = y[i] / lambda_new;
 
-		/* Check convergence */
 		if (fabs(lambda_new - lambda_old) < tol)
 			break;
 
@@ -414,28 +417,10 @@ extern "C" void rescale_matrix(double *A, size_t n, double target_rho)
 {
 	double rho = calc_spectral_radius(A, n);
 	double rescale_factor = target_rho / rho;
-
 	cblas_dscal(n * n, rescale_factor, A, 1);
 }
-/*
-void rescale_matrix(double* A, size_t n, double target_rho) 
-{
-    double rho = calc_spectral_radius(A, n);
-    double rescale_factor = target_rho / rho;
 
-    // rescale all values, such that the matrix has 
-    // spectral radius = target_rho
-    for (size_t i = 0; i < (n * n); i++) {
-        A[i] *= rescale_factor;  
-    }
-}
-*/
-/**
- * @brief Transposes a matrix.
- * @param A The input matrix (rows x cols).
- * @param A_T The output transposed matrix (cols x rows).
- */
-extern "C" void mat_transpose(double *A, double *A_T, size_t rows, size_t cols) 
+extern "C" void mat_transpose(double *A, double *A_T, size_t rows, size_t cols)
 {
     for (size_t i = 0; i < rows; i++) {
         for (size_t j = 0; j < cols; j++) {
@@ -455,29 +440,22 @@ __global__ void mat_mat_mult_kernel(const double * __restrict__ A,
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    // register variable for accumulating the dot product for this threads output element
-    // keeping this in a register is faster that assigning it to global or shared memory
     double acc = 0.0;
 
-    // Sweep tiles across the shared dimension (c1)
     int numTiles = (c1 + TILE_SIZE - 1) / TILE_SIZE;
     for (int t = 0; t < numTiles; t++) {
 
-        // Load one tile of A (row-major): rows of A, columns = tile strip
         int aCol = t * TILE_SIZE + threadIdx.x;
         tileA[threadIdx.y][threadIdx.x] =
             (row < r1 && aCol < c1) ? A[row * c1 + aCol] : 0.0;
 
-        // Load one tile of B (row-major): rows = tile strip, columns of B
         int bRow = t * TILE_SIZE + threadIdx.y;
         tileB[threadIdx.y][threadIdx.x] =
             (bRow < c1 && col < c2) ? B[bRow * c2 + col] : 0.0;
 
-        // all threads in the block must reach this point before they proceed
         __syncthreads();
 
-        // Accumulate dot product for this tile
-        #pragma unroll // Compiler optimization
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++)
             acc += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
 
@@ -487,48 +465,6 @@ __global__ void mat_mat_mult_kernel(const double * __restrict__ A,
     if (row < r1 && col < c2)
         C[row * c2 + col] = acc;
 }
-
-/**
- * @brief Multiplies two matrices: C = A * B.
- * @param A Input matrix of size (r1 x c1).
- * @param B Input matrix of size (c1 x c2).
- * @param C Output matrix of size (r1 x c2).
- */
-
-/*
-// Host wrapper using tiled kernel
-extern "C" void mat_mat_mult(double *A, double *B, double *C,
-                  size_t r1, size_t c1, size_t c2)
-{
-
-    printf("calling mat_mat_mult (CUDA VERSION)\n");
- 
-    double *d_A, *d_B, *d_C;
-    size_t bytesA = r1 * c1 * sizeof(double);
-    size_t bytesB = c1 * c2 * sizeof(double);
-    size_t bytesC = r1 * c2 * sizeof(double);
-
-    cudaMalloc(&d_A, bytesA);
-    cudaMalloc(&d_B, bytesB);
-    cudaMalloc(&d_C, bytesC);
-
-    cudaMemcpy(d_A, A, bytesA, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, B, bytesB, cudaMemcpyHostToDevice);
-
-    dim3 block(TILE_SIZE, TILE_SIZE);
-    dim3 grid((c2 + TILE_SIZE - 1) / TILE_SIZE,
-              (r1 + TILE_SIZE - 1) / TILE_SIZE);
-
-    mat_mat_mult_kernel<<<grid, block>>>(d_A, d_B, d_C, r1, c1, c2);
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(C, d_C, bytesC, cudaMemcpyDeviceToHost);
-
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
-}
-*/
 
 void mat_mat_mult(double *A, double *B, double *C,
 		  size_t r1, size_t c1, size_t c2)
@@ -540,44 +476,19 @@ void mat_mat_mult(double *A, double *B, double *C,
 		    B, c2,
 		    0.0, C, c2);
 }
-/*
-void mat_mat_mult(double *A, double *B, double *C, size_t r1, size_t c1, size_t c2) 
-{
-    for (size_t i = 0; i < r1; i++) {
-        for (size_t j = 0; j < c2; j++) {
-            C[i * c2 + j] = 0.0;
-            for (size_t k = 0; k < c1; k++) {
-                C[i * c2 + j] += A[i * c1 + k] * B[k * c2 + j];
-            }
-        }
-    }
-}
-*/
-/**
- * @brief Solves a system of linear equations Ax = b using LU decomposition.
- * This function decomposes A into L and U, then solves Ly = b (forward substitution)
- * and finally Ux = y (backward substitution).
- *
- * @param A The n x n coefficient matrix. This matrix will be modified in place.
- * @param b The n x 1 vector of constants.
- * @param x The n x 1 solution vector (output).
- * @param n The size of the system.
- * @return 0 on success, -1 on failure (e.g., singular matrix).
- */
+
 extern "C" int solve_linear_system_lud(double *A, double *b, double *x, size_t n)
 {
 	int info, *ipiv;
 	double *A_copy, *b_copy;
 	size_t i;
 
-	/* Allocate pivot array */
 	ipiv = (int *)malloc(n * sizeof(int));
 	if (!ipiv) {
 		fprintf(stderr, "Error: malloc failed for ipiv\n");
 		return -1;
 	}
 
-	/* Make copies of A and b because dgesv overwrites inputs */
 	A_copy = (double *)malloc(n * n * sizeof(double));
 	if (!A_copy) {
 		fprintf(stderr, "Error: malloc failed for A_copy\n");
@@ -595,7 +506,6 @@ extern "C" int solve_linear_system_lud(double *A, double *b, double *x, size_t n
 	}
 	memcpy(b_copy, b, n * sizeof(double));
 
-	/* Solve system: A_copy * x = b_copy */
 	info = LAPACKE_dgesv(LAPACK_ROW_MAJOR, n, 1, A_copy, n, ipiv, b_copy, 1);
 
 	if (info != 0) {
@@ -609,7 +519,6 @@ extern "C" int solve_linear_system_lud(double *A, double *b, double *x, size_t n
 		return -1;
 	}
 
-	/* Copy solution to output vector */
 	for (i = 0; i < n; i++)
 		x[i] = b_copy[i];
 
@@ -619,56 +528,3 @@ extern "C" int solve_linear_system_lud(double *A, double *b, double *x, size_t n
 
 	return 0;
 }
-/*
-int solve_linear_system_lud(double *A, double *b, double *x, size_t n) 
-{
-    // --- Step 1: LU Decomposition (Doolittle's method) ---
-    for (size_t i = 0; i < n; i++) {
-        // Upper Triangle
-        for (size_t k = i; k < n; k++) {
-            double sum = 0.0;
-            for (size_t j = 0; j < i; j++) {
-                sum += A[i * n + j] * A[j * n + k];
-            }
-            A[i * n + k] = A[i * n + k] - sum;
-        }
-        // Lower Triangle
-        for (size_t k = i + 1; k < n; k++) {
-            if (A[i * n + i] == 0.0) {
-                fprintf(stderr, "Error: Matrix is singular and cannot be inverted.\n");
-                return -1; // Avoid division by zero
-            }
-            double sum = 0.0;
-            for (size_t j = 0; j < i; j++) {
-                sum += A[k * n + j] * A[j * n + i];
-            }
-            A[k * n + i] = (A[k * n + i] - sum) / A[i * n + i];
-        }
-    }
-
-    // --- Step 2: Forward substitution (solves Ly = b for y) ---
-    double y[n];
-    for (size_t i = 0; i < n; i++) {
-        double sum = 0.0;
-        for (size_t j = 0; j < i; j++) {
-            sum += A[i * n + j] * y[j];
-        }
-        y[i] = b[i] - sum;
-    }
-
-    // --- Step 3: Backward substitution (solves Ux = y for x) ---
-    for (int i = n - 1; i >= 0; i--) {
-        double sum = 0.0;
-        for (int j = i + 1; j < (int)n; j++) {
-            sum += A[i * n + j] * x[j];
-        }
-        if (A[i * n + i] == 0.0) {
-            fprintf(stderr, "Error: Matrix is singular.\n");
-            return -1;
-        }
-        x[i] = (y[i] - sum) / A[i * n + i];
-    }
-
-    return EXIT_SUCCESS; 
-}
-*/
