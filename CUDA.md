@@ -250,3 +250,26 @@ ncu-ui kernel_report.ncu-rep
 # Roofline
 ncu --set roofline --kernel-name update_flif_gl_kernel ./spoken_digit_recognition
 ```
+
+
+## spoken_digit_recognition CUDA path flow:
+
+main()
+    → spires_train_ridge()
+        → train_output_ridge_regression()   [reservoir.c]
+            → cuda_init_reservoir()          uploads W, W_in, GL coeffs to GPU
+            → cuda_alloc_state_buffer()      allocates d_X on GPU
+            → [loop over 62,500 timesteps]
+                → step_reservoir()           #if USE_CUDA dispatch
+                    → cuda_step_reservoir()
+                        → cublasSgemv()      input projection (W_in × input)
+                        → [10 micro-steps]
+                            → cublasSgemv()           recurrent (W × spikes)
+                            → update_flif_gl_kernel() 1000 neurons in parallel
+                → cuda_collect_state()       D2D copy into d_X (no CPU sync)
+            → cuda_get_state_buffer()        ONE sync + D2H copy of entire d_X
+            → [CPU: ridge regression via LAPACK]
+
+    → spires_step() / spires_compute_output()  [inference loop]
+        → step_reservoir() → cuda_step_reservoir() [same GPU path]
+        → compute_output() → read_reservoir_state() → cuda_copy_state() [D2H]
