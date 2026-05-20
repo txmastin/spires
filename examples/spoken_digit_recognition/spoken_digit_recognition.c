@@ -186,7 +186,7 @@ int main(void) {
     double input_strength = 1.0;
     double ei_ratio = 0.8;
     double dt = 0.1;
-    double lambda = 0.0; // Ridge regression regularization
+    double lambda = 0.1; // Ridge regression regularization
 
     FILE *out_file = fopen("accuracy.csv", "a");
 
@@ -202,7 +202,7 @@ int main(void) {
                 0.0,    // params[2]: V_rest
                 20.0,   // params[3]: tau_m
                 alpha,    // params[4]: alpha
-                10.0,   // params[5]: Tmem
+                20.0,   // params[5]: Tmem
                 bias_from_alpha(alpha)     // params[6]: bias
             };
 

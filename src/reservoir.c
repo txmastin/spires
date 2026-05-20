@@ -625,7 +625,7 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
         cuda_alloc_state_buffer(reservoir, series_length);
     #endif
 
-    // CPU path: single reusable buffer avoids one malloc/free per timestep.
+    // cpu path
     #ifndef USE_CUDA
     double *state_buf = malloc(num_neurons * sizeof(double));
     if (!state_buf) {
@@ -640,8 +640,6 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     // CPU path: reads state to host and memcpy into X each step.
     for (size_t t = 0; t < series_length; t++) {
         const double *current_input = &input_series[t * num_inputs];
-        //calls CUDA version of step_reservior if cuda is enabled
-        //else CPU version
         step_reservoir(reservoir, current_input);
         #ifdef USE_CUDA
             cuda_collect_state(reservoir, t);

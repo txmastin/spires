@@ -119,14 +119,14 @@ extern "C" void call_peek()
 extern "C" void cuda_init_reservoir(struct reservoir *r)
 {
     cudaFree(0);
-    cudaGetLastError();
+    //cudaGetLastError();
     PEEK("cuda_init_reservoir start");
 
     struct cuda_backend *cb = (struct cuda_backend *)calloc(1, sizeof *cb);
     if (!cb) { fprintf(stderr, "OOM allocating cuda_backend\n"); exit(1); }
 
-    const size_t N = r->num_neurons;
-    const size_t M = r->num_inputs;
+    const size_t num_neurons = r->num_neurons;
+    const size_t num_inputs = r->num_inputs;
 
     struct flif_gl_neuron *n0 = (struct flif_gl_neuron *)r->neurons[0];
     cb->V_th    = (float)n0->V_th;
@@ -151,43 +151,43 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
     CUDA_CHECK(cudaMemcpyToSymbol(c_coeffs, coeffs_f, n0->mem_len * sizeof(float)));
     free(coeffs_f);
 
-    CUDA_CHECK(cudaMallocHost(&cb->host_spikes, N * sizeof(double)));
+    CUDA_CHECK(cudaMallocHost(&cb->host_spikes, num_neurons * sizeof(double)));
 
     // Allocate float weight matrices on device
-    CUDA_CHECK(cudaMalloc(&cb->d_W,    N * N * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&cb->d_W_in, N * M * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_W, num_neurons * num_neurons * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_W_in, num_neurons * num_inputs * sizeof(float)));
 
-    // Convert and upload W (double → float)
-    float *W_f = (float *)malloc(N * N * sizeof(float));
-    for (size_t k = 0; k < N * N; k++) W_f[k] = (float)r->W[k];
-    CUDA_CHECK(cudaMemcpy(cb->d_W, W_f, N * N * sizeof(float), cudaMemcpyHostToDevice));
+    // Convert r->W to float and upload to device 
+    float *W_f = (float *)malloc(num_neurons * num_neurons * sizeof(float));
+    for (size_t k = 0; k < num_neurons * num_neurons; k++) W_f[k] = (float)r->W[k];
+    CUDA_CHECK(cudaMemcpy(cb->d_W, W_f, num_neurons * num_neurons * sizeof(float), cudaMemcpyHostToDevice));
     free(W_f);
 
     // Convert and upload W_in (double → float)
-    float *W_in_f = (float *)malloc(N * M * sizeof(float));
-    for (size_t k = 0; k < N * M; k++) W_in_f[k] = (float)r->W_in[k];
-    CUDA_CHECK(cudaMemcpy(cb->d_W_in, W_in_f, N * M * sizeof(float), cudaMemcpyHostToDevice));
+    float *W_in_f = (float *)malloc(num_neurons * num_inputs * sizeof(float));
+    for (size_t k = 0; k < num_neurons * num_inputs; k++) W_in_f[k] = (float)r->W_in[k];
+    CUDA_CHECK(cudaMemcpy(cb->d_W_in, W_in_f, num_neurons * num_inputs * sizeof(float), cudaMemcpyHostToDevice));
     free(W_in_f);
 
     // Allocate float scratch buffers
-    CUDA_CHECK(cudaMalloc(&cb->d_input_vector,    M * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&cb->d_external_inputs, N * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&cb->d_recurrent,       N * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&cb->d_spikes_a,        N * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&cb->d_spikes_b,        N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_input_vector,    num_inputs * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_external_inputs, num_neurons * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_recurrent,       num_neurons * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_spikes_a,        num_neurons * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_spikes_b,        num_neurons * sizeof(float)));
 
     // V_history: time-major [mem_len x N], init to V_rest
-    CUDA_CHECK(cudaMalloc(&cb->d_V_history, (size_t)cb->mem_len * N * sizeof(float)));
-    float *tmp = (float *)malloc((size_t)cb->mem_len * N * sizeof(float));
-    for (size_t k = 0; k < (size_t)cb->mem_len * N; k++) tmp[k] = cb->V_rest;
+    CUDA_CHECK(cudaMalloc(&cb->d_V_history, (size_t)cb->mem_len * num_neurons * sizeof(float)));
+    float *tmp = (float *)malloc((size_t)cb->mem_len * num_neurons * sizeof(float));
+    for (size_t k = 0; k < (size_t)cb->mem_len * num_neurons; k++) tmp[k] = cb->V_rest;
     CUDA_CHECK(cudaMemcpy(cb->d_V_history, tmp,
-                          (size_t)cb->mem_len * N * sizeof(float),
+                          (size_t)cb->mem_len * num_neurons * sizeof(float),
                           cudaMemcpyHostToDevice));
     free(tmp);
 
     // Initial spikes = 0
-    CUDA_CHECK(cudaMemset(cb->d_spikes_a, 0, N * sizeof(float)));
-    CUDA_CHECK(cudaMemset(cb->d_spikes_b, 0, N * sizeof(float)));
+    CUDA_CHECK(cudaMemset(cb->d_spikes_a, 0, num_neurons * sizeof(float)));
+    CUDA_CHECK(cudaMemset(cb->d_spikes_b, 0, num_neurons * sizeof(float)));
 
     // cuBLAS and stream
     CUDA_CHECK(cudaStreamCreate(&cb->stream));
@@ -201,22 +201,22 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
 {
     struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
     const int    micro_steps = (int)llround(1.0 / r->dt);
-    const int    N = (int)r->num_neurons;
-    const int    M = (int)r->num_inputs;
+    const int    num_neurons = (int)r->num_neurons;
+    const int    num_inputs = (int)r->num_inputs;
     const float  zero_f = 0.0f, one_f = 1.0f;
     const float  input_strength_f = (float)r->input_strength;
 
-    // Convert input vector double → float and upload
-    float input_f[M];
-    for (int j = 0; j < M; j++) input_f[j] = (float)input_vector[j];
+    // Convert input vector to float and upload
+    float input_f[num_inputs];
+    for (int j = 0; j < num_inputs; j++) input_f[j] = (float)input_vector[j];
     CUDA_CHECK(cudaMemcpyAsync(cb->d_input_vector, input_f,
-                               M * sizeof(float),
+                               num_inputs * sizeof(float),
                                cudaMemcpyHostToDevice, cb->stream));
 
     CUBLAS_CHECK(cublasSgemv(cb->cublas, CUBLAS_OP_T,
-                             M, N,
+                             num_inputs, num_neurons,
                              &input_strength_f,
-                             cb->d_W_in, M,
+                             cb->d_W_in, num_inputs,
                              cb->d_input_vector, 1,
                              &zero_f,
                              cb->d_external_inputs, 1));
@@ -224,14 +224,14 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
     float *last = cb->d_spikes_a;
     float *next = cb->d_spikes_b;
     const int threads = 256;
-    const int blocks  = (N + threads - 1) / threads;
+    const int blocks  = (num_neurons + threads - 1) / threads;
 
     for (int t = 0; t < micro_steps; ++t) {
 
         CUBLAS_CHECK(cublasSgemv(cb->cublas, CUBLAS_OP_T,
-                                 N, N,
+                                 num_neurons, num_neurons,
                                  &one_f,
-                                 cb->d_W, N,
+                                 cb->d_W, num_neurons,
                                  last, 1,
                                  &zero_f,
                                  cb->d_recurrent, 1));
@@ -246,7 +246,7 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
             cb->d_V_history, next,
             cb->V_rest, cb->V_th, cb->V_reset,
             cb->tau_m, cb->bias, cb->dt_alpha,
-            head, prev_idx, limit, cb->mem_len, N);
+            head, prev_idx, limit, cb->mem_len, num_neurons);
 
         CUDA_CHECK(cudaGetLastError());
 
