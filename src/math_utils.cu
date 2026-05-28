@@ -123,11 +123,14 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
     PEEK("cuda_init_reservoir start");
 
     struct cuda_backend *cb = (struct cuda_backend *)calloc(1, sizeof *cb);
-    if (!cb) { fprintf(stderr, "OOM allocating cuda_backend\n"); exit(1); }
+    if (!cb) { fprintf(stderr, "Error: allocating cuda_backend failed\n"); exit(1); }
 
     const size_t num_neurons = r->num_neurons;
     const size_t num_inputs = r->num_inputs;
 
+    //initialize flif_gl_neuron
+    //this is temporary. probably needs a builder pattern 
+    //when cuda funcitonality supports more neurons
     struct flif_gl_neuron *n0 = (struct flif_gl_neuron *)r->neurons[0];
     cb->V_th    = (float)n0->V_th;
     cb->V_reset = (float)n0->V_reset;
@@ -146,6 +149,7 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
     }
 
     // Convert GL coefficients to float and upload to __constant__ memory
+    // coeffs can be uploaded to __constant__ because they dont change 
     float *coeffs_f = (float *)malloc(n0->mem_len * sizeof(float));
     for (int k = 0; k < n0->mem_len; k++) coeffs_f[k] = (float)n0->coeffs[k];
     CUDA_CHECK(cudaMemcpyToSymbol(c_coeffs, coeffs_f, n0->mem_len * sizeof(float)));
@@ -154,8 +158,8 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
     CUDA_CHECK(cudaMallocHost(&cb->host_spikes, num_neurons * sizeof(double)));
 
     // Allocate float weight matrices on device
-    CUDA_CHECK(cudaMalloc(&cb->d_W, num_neurons * num_neurons * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&cb->d_W_in, num_neurons * num_inputs * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_W,     num_neurons * num_neurons * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&cb->d_W_in,  num_neurons * num_inputs * sizeof(float)));
 
     // Convert r->W to float and upload to device 
     float *W_f = (float *)malloc(num_neurons * num_neurons * sizeof(float));
