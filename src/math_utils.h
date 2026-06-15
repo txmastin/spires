@@ -26,7 +26,6 @@ void cuda_step_reservoir(struct reservoir *r, const double *input_vector);
 void cuda_get_spikes(struct reservoir *r, double *spike_out);
 void cuda_free_reservoir(struct reservoir *r);
 void cuda_copy_state(struct reservoir *r, double *out);
-void call_peek();
 void cuda_reset_reservoir(struct reservoir *r);
 void cuda_alloc_state_buffer(struct reservoir *r, size_t series_length);
 void cuda_collect_state(struct reservoir *r, size_t t);

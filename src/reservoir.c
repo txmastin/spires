@@ -67,12 +67,6 @@ int init_reservoir(struct reservoir *r)
     rescale_weights(r);
     randomize_output_layer(r);
 
-    /*
-    #if USE_CUDA
-        r->cuda_backend = cuda_init_reservoir(r);
-    #endif
-    */
-
     return EXIT_SUCCESS;
 }
 
@@ -134,12 +128,6 @@ void cpu_step_reservoir(struct reservoir *r, const double *input_vector)
     cblas_dgemv(CblasRowMajor, CblasNoTrans,
                 num_neurons, num_inputs, r->input_strength, r->W_in, num_inputs,
                 input_vector, 1, 0.0, external_inputs, 1);
-
-   //runs cuda version if compiled with cuda
-   //runs cpu version otherwise 
-   /*
-    cblas_mat_vec_mult(r, input_vector, external_inputs);
-    */
 
 
     // --- Double buffer to hold spikes, which evolve at the micro-step scale ---
@@ -627,12 +615,12 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
 
     // cpu path
     #ifndef USE_CUDA
-    double *state_buf = malloc(num_neurons * sizeof(double));
-    if (!state_buf) {
-        fprintf(stderr, "Failed to allocate memory for state buffer.\n");
-        free(X);
-        return;
-    }
+        double *state_buf = malloc(num_neurons * sizeof(double));
+        if (!state_buf) {
+            fprintf(stderr, "Failed to allocate memory for state buffer.\n");
+            free(X);
+            return;
+        }
     #endif
 
     // Run the reservoir and record the state of every neuron at every timestep.
@@ -656,7 +644,7 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
         free(state_buf);
     #endif
 
-        // --- Step 2: Construct the matrices for the normal equation A*W = B ---
+    // --- Step 2: Construct the matrices for the normal equation A*W = B ---
     // A = X'X + lambda*I  (size: num_neurons x num_neurons)
     // B = X'Y             (size: num_neurons x 1)
 

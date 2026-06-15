@@ -28,8 +28,8 @@ LDFLAGS := $(OMP_FLAGS)
 # -------- CUDA toggle --------
 USE_CUDA ?= 0
 ifeq ($(USE_CUDA), 1)
-    CFLAGS  += -DUSE_CUDA
-    LDLIBS  += -lcudart -lcublas
+    CFLAGS  += -DUSE_CUDA -pg
+    LDLIBS  += -lcudart -lcublas -pg 
 endif
 
 BIN_DIR := bin

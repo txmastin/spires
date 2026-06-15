@@ -179,14 +179,14 @@ int main(void) {
 
     // --- 2. Setup Reservoir Parameters ---
     printf("Configuring reservoir...\n");
-    size_t num_neurons = 1000;
+    size_t num_neurons = 400;
     double desired_degree = 15;
     double spectral_radius = 0.99;
     double connectivity = desired_degree/((double)num_neurons - 1);
     double input_strength = 1.0;
     double ei_ratio = 0.8;
     double dt = 0.1;
-    double lambda = 0.1; // Ridge regression regularization
+    double lambda = 0.0; // Ridge egression regularization
 
     FILE *out_file = fopen("accuracy.csv", "a");
 
@@ -194,7 +194,7 @@ int main(void) {
     int trials = 1;
     
     for (int i = 0; i < trials; ++i) {
-        for (double alpha = 0.2; alpha <= 0.7; alpha += 0.1) {
+        for (double alpha = 0.1; alpha <= 0.6; alpha += 0.1) {
             // neuron parameters
             double fractional_neuron_params[] = {
                 1.0,    // params[0]: V_th
@@ -294,7 +294,7 @@ int main(void) {
             }
 
             double accuracy = (double)correct_predictions / NUM_SAMPLES_TEST * 100.0;
-            printf("Alpha: %.1f\nFinal Accuracy: %.2f%%\n", alpha, accuracy);
+            printf("Alpha: %.2f\nFinal Accuracy: %.2f%%\n", alpha, accuracy);
             fprintf(out_file, "%f, %f\n", alpha, accuracy);
 
             spires_reservoir_destroy(res);

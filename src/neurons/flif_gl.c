@@ -40,7 +40,6 @@ struct flif_gl_neuron *init_flif_gl(double *params, double dt, double *coeffs)
 
     return n;
 }
-/*
 void update_flif_gl(struct flif_gl_neuron* n, double input, double dt) 
 {
     // Reset spike from the previous micro-step
@@ -79,8 +78,8 @@ void update_flif_gl(struct flif_gl_neuron* n, double input, double dt)
     // Increment the neuron's internal micro-step counter
     n->internal_step++;
 }
-*/
 
+/*
 void update_flif_gl(struct flif_gl_neuron* n, double input, double dt) {
     if (n->spike == 1.0) n->spike = 0.0;
 
@@ -111,6 +110,7 @@ void update_flif_gl(struct flif_gl_neuron* n, double input, double dt) {
     n->V_history[head] = n->V;
     n->internal_step++;
 }
+*/
 
 void free_flif_gl(struct flif_gl_neuron* n) 
 {

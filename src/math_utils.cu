@@ -64,10 +64,10 @@ __global__ void fill_float_kernel(float *p, float v, size_t n)
 }
 
 __global__ void update_flif_gl_kernel(
-    const float * __restrict__ external_inputs, // [N]
-    const float * __restrict__ recurrent,       // [N]
-    float       * __restrict__ V_history,       // [mem_len x N], time-major
-    float       * __restrict__ next_spikes,     // [N]  output
+    const float * external_inputs, // [N]
+    const float * recurrent,       // [N]
+    float       * V_history,       // [mem_len x N], time-major
+    float       * next_spikes,     // [N]  output
     float V_rest,
     float V_th,
     float V_reset,
@@ -91,7 +91,7 @@ __global__ void update_flif_gl_kernel(
         idx = (idx == 0) ? mem_len - 1 : idx - 1;
     }
 
-    // --- 2. RHS of the fractional LIF equation ---
+    // --- 2. right hand side (RHS) of the fractional LIF equation ---
     const float V_prev = V_history[(size_t)prev_idx * N + i];
     const float rhs = -(V_prev - V_rest) / tau_m
                      + external_inputs[i] + recurrent[i] + bias;
@@ -109,11 +109,6 @@ __global__ void update_flif_gl_kernel(
     // --- 5. Write outputs ---
     V_history[(size_t)head * N + i] = V;
     next_spikes[i] = spike;
-}
-
-extern "C" void call_peek()
-{
-    PEEK("calling...");
 }
 
 extern "C" void cuda_init_reservoir(struct reservoir *r)
@@ -204,7 +199,7 @@ extern "C" void cuda_init_reservoir(struct reservoir *r)
 extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vector)
 {
     struct cuda_backend *cb = (struct cuda_backend *)r->cuda_backend;
-    const int    micro_steps = (int)llround(1.0 / r->dt);
+    const int    num_micro_steps = (int)llround(1.0 / r->dt);
     const int    num_neurons = (int)r->num_neurons;
     const int    num_inputs = (int)r->num_inputs;
     const float  zero_f = 0.0f, one_f = 1.0f;
@@ -212,11 +207,15 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
 
     // Convert input vector to float and upload
     float input_f[num_inputs];
-    for (int j = 0; j < num_inputs; j++) input_f[j] = (float)input_vector[j];
+    for (int i = 0; i < num_inputs; i++){
+        input_f[i] = (float)input_vector[i];
+    } 
+    
     CUDA_CHECK(cudaMemcpyAsync(cb->d_input_vector, input_f,
                                num_inputs * sizeof(float),
                                cudaMemcpyHostToDevice, cb->stream));
 
+    // cublas is COL major, so we take the transpose 
     CUBLAS_CHECK(cublasSgemv(cb->cublas, CUBLAS_OP_T,
                              num_inputs, num_neurons,
                              &input_strength_f,
@@ -225,18 +224,17 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
                              &zero_f,
                              cb->d_external_inputs, 1));
 
-    float *last = cb->d_spikes_a;
-    float *next = cb->d_spikes_b;
+    float *last_spikes = cb->d_spikes_a;
+    float *new_spikes = cb->d_spikes_b;
     const int threads = 256;
     const int blocks  = (num_neurons + threads - 1) / threads;
 
-    for (int t = 0; t < micro_steps; ++t) {
-
+    for (int t = 0; t < num_micro_steps; ++t) {
         CUBLAS_CHECK(cublasSgemv(cb->cublas, CUBLAS_OP_T,
                                  num_neurons, num_neurons,
                                  &one_f,
                                  cb->d_W, num_neurons,
-                                 last, 1,
+                                 last_spikes, 1,
                                  &zero_f,
                                  cb->d_recurrent, 1));
 
@@ -247,7 +245,7 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
 
         update_flif_gl_kernel<<<blocks, threads, 0, cb->stream>>>(
             cb->d_external_inputs, cb->d_recurrent,
-            cb->d_V_history, next,
+            cb->d_V_history, new_spikes,
             cb->V_rest, cb->V_th, cb->V_reset,
             cb->tau_m, cb->bias, cb->dt_alpha,
             head, prev_idx, limit, cb->mem_len, num_neurons);
@@ -256,11 +254,11 @@ extern "C" void cuda_step_reservoir(struct reservoir *r, const double *input_vec
 
         cb->internal_step++;
 
-        float *tmp = last; last = next; next = tmp;
+        float *tmp = last_spikes; last_spikes = new_spikes; new_spikes = tmp;
     }
 
-    cb->d_spikes_a = last;
-    cb->d_spikes_b = next;
+    cb->d_spikes_a = last_spikes;
+    cb->d_spikes_b = new_spikes;
 }
 
 // Copies current reservoir state (float) to host buffer (double).
@@ -278,7 +276,10 @@ extern "C" void cuda_copy_state(struct reservoir *r, double *out)
                           cb->d_V_history + (size_t)last_head * N,
                           N * sizeof(float),
                           cudaMemcpyDeviceToHost));
-    for (size_t k = 0; k < N; k++) out[k] = (double)tmp_f[k];
+    //copy device buffer to host and convert back to double
+    for (size_t i = 0; i < N; i++) {
+        out[i] = (double)tmp_f[i];
+    }
     free(tmp_f);
 }
 
@@ -332,7 +333,10 @@ extern "C" void cuda_get_state_buffer(struct reservoir *r, double *h_X, size_t s
     CUDA_CHECK(cudaMemcpy(h_X_f, cb->d_X,
                           series_length * N * sizeof(float),
                           cudaMemcpyDeviceToHost));
-    for (size_t k = 0; k < series_length * N; k++) h_X[k] = (double)h_X_f[k];
+    for (size_t k = 0; k < series_length * N; k++) {
+        h_X[k] = (double)h_X_f[k];
+    } 
+
     free(h_X_f);
 }
 
@@ -426,6 +430,7 @@ extern "C" void rescale_matrix(double *A, size_t n, double target_rho)
 
 extern "C" void mat_transpose(double *A, double *A_T, size_t rows, size_t cols)
 {
+    printf("calling mat_transpose\n");
     for (size_t i = 0; i < rows; i++) {
         for (size_t j = 0; j < cols; j++) {
             A_T[j * rows + i] = A[i * cols + j];
@@ -473,7 +478,6 @@ __global__ void mat_mat_mult_kernel(const double * __restrict__ A,
 void mat_mat_mult(double *A, double *B, double *C,
 		  size_t r1, size_t c1, size_t c2)
 {
-    printf("entering: mat_mat_mul cblas\n");
 	cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
 		    r1, c2, c1,
 		    1.0, A, c1,

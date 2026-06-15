@@ -20,8 +20,8 @@ else
     OMP_FLAGS := -fopenmp
 endif
 
-CFLAGS   := -O2 -Wall -Wextra -Wpedantic -Wshadow -g $(OMP_FLAGS)
-INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR)
+CFLAGS   := -O2 -Wall -Wextra -Wpedantic -Wshadow -g $(OMP_FLAGS) -pg
+INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR) -pg
 
 ifeq ($(OS), Windows_NT)
     INCLUDES += -I/usr/include/openblas
@@ -101,6 +101,11 @@ $(BUILD_DIR):
 	mkdir -p $@
 $(LIB_DIR):
 	mkdir -p $@
+
+
+# -------- device info ------------
+device_info: device_info.cu
+	$(NVCC) $(CUDA_FLAGS) -o device_info device_info.cu
 
 clean:
 	rm -rf $(BUILD_DIR) $(LIB_DIR)
