@@ -46,8 +46,11 @@ void read_reservoir_state(struct reservoir *reservoir, double *buffer);
 void read_reservoir_spikes(struct reservoir *reservoir, double *buffer);
 double *copy_reservoir_state(struct reservoir *reservoir);
 void train_output_iteratively(struct reservoir *reservoir, double *target_vector, double lr);
-void train_output_ridge_regression(struct reservoir *reservoir, double *input_series, 
+void train_output_ridge_regression(struct reservoir *reservoir, double *input_series,
                                 double *target_series, size_t series_length, double lambda);
+void train_output_rls(struct reservoir *reservoir, double *input_series,
+                      double *target_series, size_t series_length,
+                      double delta, double lambda);
 void reset_reservoir(struct reservoir *reservoir);
 #endif // RESERVOIR_H
 

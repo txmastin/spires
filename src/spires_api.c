@@ -132,6 +132,21 @@ spires_status spires_train_ridge(spires_reservoir *r,
     return SPIRES_OK;
 }
 
+spires_status spires_train_rls(spires_reservoir *r,
+                               const double *input_series,
+                               const double *target_series,
+                               size_t series_length,
+                               double delta, double lambda)
+{
+    if (!r || !r->impl || !input_series || !target_series)
+        return SPIRES_ERR_INVALID_ARG;
+    train_output_rls(r->impl,
+                     (double *)input_series,
+                     (double *)target_series,
+                     series_length, delta, lambda);
+    return SPIRES_OK;
+}
+
 /* --------------- state --------------- */
 double *spires_copy_reservoir_state(spires_reservoir *r)
 {

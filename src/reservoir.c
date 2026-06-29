@@ -586,12 +586,7 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     for (size_t t = 0; t < series_length; t++) {
         const double *current_input = &input_series[t * num_inputs];
         step_reservoir(reservoir, current_input);
-
-        double *current_state = copy_reservoir_state(reservoir); // copy_reservoir_state allocates memory
-        if (current_state) {
-            memcpy(&X[t * num_neurons], current_state, num_neurons * sizeof(double));
-            free(current_state); // so we must not forget to free it
-        }
+        read_reservoir_state(reservoir, &X[t * num_neurons]);
     }
 
     // --- Step 2: Construct the matrices for the normal equation A*W = B ---
@@ -672,6 +667,94 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     free(X);
     free(X_T);
     free(A);
+}
+
+void train_output_rls(struct reservoir *reservoir, double *input_series,
+                      double *target_series, size_t series_length,
+                      double delta, double lambda)
+{
+    if (reservoir == NULL) {
+        fprintf(stderr, "Error training. Reservoir not initialized!");
+        return;
+    }
+
+    size_t num_neurons = reservoir->num_neurons;
+    size_t num_inputs  = reservoir->num_inputs;
+    size_t num_outputs = reservoir->num_outputs;
+
+    // --- Step 1: Allocate the inverse correlation matrix P ---
+    double *P = calloc(num_neurons * num_neurons, sizeof(double));
+    if (!P) {
+        fprintf(stderr, "Failed to allocate memory for RLS correlation matrix P.\n");
+        return;
+    }
+
+    // --- Step 2: Allocate workspace arrays ---
+    double *state = malloc(num_neurons * sizeof(double));
+    double *Px    = malloc(num_neurons * sizeof(double));
+    double *Wx    = malloc(num_outputs * sizeof(double));
+    if (!state || !Px || !Wx) {
+        fprintf(stderr, "Failed to allocate memory for RLS workspace.\n");
+        free(P); free(state); free(Px); free(Wx);
+        return;
+    }
+
+    // --- Step 3: Initialize P = (1/delta) * I ---
+    double inv_delta = 1.0 / delta;
+    for (size_t i = 0; i < num_neurons; i++)
+        P[i * num_neurons + i] = inv_delta;
+
+    // --- Step 4: Zero W_out and reset reservoir state ---
+    memset(reservoir->W_out, 0, num_outputs * num_neurons * sizeof(double));
+    reset_reservoir(reservoir);
+
+    // --- Step 5: RLS update loop ---
+    for (size_t t = 0; t < series_length; t++) {
+        const double *current_input  = &input_series[t * num_inputs];
+        const double *current_target = &target_series[t * num_outputs];
+
+        step_reservoir(reservoir, current_input);
+        read_reservoir_state(reservoir, state);
+
+        // Px = P * x
+        cblas_dgemv(CblasRowMajor, CblasNoTrans,
+                    num_neurons, num_neurons, 1.0, P, num_neurons,
+                    state, 1, 0.0, Px, 1);
+
+        // denom = lambda + x' * Px
+        double denom = lambda + cblas_ddot(num_neurons, state, 1, Px, 1);
+
+        // k = Px / denom  (in-place; Px now holds the gain vector k)
+        cblas_dscal(num_neurons, 1.0 / denom, Px, 1);
+
+        // e = target - W_out * x  (Wx holds the error vector)
+        cblas_dgemv(CblasRowMajor, CblasNoTrans,
+                    num_outputs, num_neurons, 1.0, reservoir->W_out, num_neurons,
+                    state, 1, 0.0, Wx, 1);
+        for (size_t i = 0; i < num_outputs; i++)
+            Wx[i] = current_target[i] - Wx[i];
+
+        // W_out += e * k'  (rank-1 update across all output channels)
+        cblas_dger(CblasRowMajor, num_outputs, num_neurons,
+                   1.0, Wx, 1, Px, 1,
+                   reservoir->W_out, num_neurons);
+
+        // P -= denom * k * k'
+        // Shortcut: since P is symmetric, k * x'P = denom * k * k'
+        cblas_dger(CblasRowMajor, num_neurons, num_neurons,
+                   -denom, Px, 1, Px, 1,
+                   P, num_neurons);
+
+        // P /= lambda  (forgetting factor scaling)
+        if (lambda != 1.0)
+            cblas_dscal(num_neurons * num_neurons, 1.0 / lambda, P, 1);
+    }
+
+    // --- Step 6: Cleanup ---
+    free(P);
+    free(state);
+    free(Px);
+    free(Wx);
 }
 
 // Function to reset neurons in reservoir (helpful for fractional order neuron models)

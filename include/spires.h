@@ -109,6 +109,12 @@ spires_status spires_train_ridge(spires_reservoir *r,
                                  const double *target_series,
                                  size_t series_length, double lambda);
 
+spires_status spires_train_rls(spires_reservoir *r,
+                               const double *input_series,
+                               const double *target_series,
+                               size_t series_length,
+                               double delta, double lambda);
+
 /* ----------------------------
  * State access
  * ---------------------------- */
