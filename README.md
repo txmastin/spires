@@ -9,6 +9,7 @@ Spires provides configurable spiking neural network reservoirs with multiple neu
 - **5 neuron models**: discrete LIF, biophysical LIF, and three fractional-order variants (Caputo, Grunwald-Letnikov, diffusive)
 - **3 network topologies**: Erdos-Renyi random, Watts-Strogatz small-world, Barabasi-Albert scale-free
 - **Readout training**: ridge regression (batch) and online delta rule
+- **Coarse-graining**: renormalization-group-inspired reservoir compression that preserves critical dynamics
 - **Built-in optimizer**: AGILE-based hyperparameter search with multi-fidelity budgets
 - **OpenMP parallelism**: multi-threaded neuron updates via BLAS
 - **Clean C API**: opaque handles, status codes, no hidden allocations in hot paths
@@ -21,11 +22,11 @@ $$\frac{dv\_i}{dt} = -\frac{v\_i(t) - v\_{rest}}{\tau\_m} + I\_i(t),$$
 
 where $\tau\_m$ is the membrane time constant and $I\_i(t) = \sum\_{j=1}^{N} W\_{ij} S\_j(t) + \gamma W\_{in,i} u(t)$ is the total synaptic input comprising recurrent spike impulses and external input.
 
-Spires extends this with **fractional-order LIF neurons**, which replace the integer-order derivative with a fractional derivative of order $\alpha \in (0, 1]$:
+Spires extends this with **fractional-order LIF neurons** [[2]](#references), which replace the integer-order derivative with a fractional derivative of order $\alpha \in (0, 1]$:
 
 $$D^\alpha v\_i(t) = -\frac{v\_i(t) - v\_{rest}}{\tau\_m} + I\_i(t).$$
 
-This is discretized using the Grunwald-Letnikov scheme:
+This is discretized using the Grünwald–Letnikov (GL) scheme [[2]](#references):
 
 $$v\_i[n] = \Delta t^\alpha \left(-\frac{v\_i[n-1] - v\_{rest}}{\tau\_m} + I\_i[n]\right) - \sum\_{k=1}^{L} w\_k^{(\alpha)} v\_i[n-k],$$
 
@@ -59,7 +60,7 @@ The readout is trained to minimize the error between the target and predicted ou
 | Fractional LIF (Grunwald-Letnikov) | `SPIRES_NEURON_FLIF_GL` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias]` |
 | Fractional LIF (Diffusive) | `SPIRES_NEURON_FLIF_DIFFUSIVE` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias]` |
 
-The fractional-order parameter `alpha` controls the order of the fractional derivative in the membrane potential dynamics. When `alpha = 1.0`, the neuron reduces to a standard LIF. Values `0 < alpha < 1` introduce long-range temporal memory through the Grunwald-Letnikov (or Caputo/diffusive) discretization of the fractional derivative, enabling spike-frequency adaptation and richer temporal dynamics.
+The fractional-order parameter `alpha` controls the order of the fractional derivative in the membrane potential dynamics. When `alpha = 1.0`, the neuron reduces to a standard LIF. Values `0 < alpha < 1` introduce long-range temporal memory through the Grünwald–Letnikov (or Caputo/diffusive) discretization of the fractional derivative [[2]](#references), enabling spike-frequency adaptation and richer temporal dynamics. The parameter α simultaneously governs memory capacity, active information storage, and information transfer — each peaking at distinct values of α — making it a continuous control parameter over the reservoir's information-processing regime.
 
 The `T_mem` parameter controls the memory horizon of the fractional derivative. The number of history samples retained is `L = T_mem / dt`. Larger values increase accuracy of the fractional approximation at the cost of computation and memory.
 
@@ -102,6 +103,23 @@ The delta rule updates output weights one step at a time with a single scaled ou
 $$W\_{out} \leftarrow W\_{out} + \mu \cdot \epsilon(t) \cdot \mathbf{v}(t)^\intercal,$$
 
 where $\mu$ is the learning rate and $\epsilon(t) = y\_{target}(t) - y(t)$ is the prediction error. Unlike RLS, it requires no auxiliary matrices — memory overhead is $O(N)$ and per-step compute is $O(N \cdot D\_{out})$ regardless of reservoir size. Convergence is slower than RLS, but the minimal footprint makes it well suited to embedded or resource-constrained deployments where memory is more limiting than training efficiency. Use `spires_train_online()`.
+
+## Coarse-Graining
+
+Spires implements the coarse-graining (renormalization) algorithm from [[1]](#references). The algorithm iteratively merges pairs of neurons connected by strong positive weights — neurons that share a high synaptic weight perform redundant computation and can be treated as a single unit.
+
+When two neurons $i$ and $j$ satisfy $W_{ij} > w_{th}$ or $W_{ji} > w_{th}$, they are merged into a single super-neuron with:
+
+- **State**: $v_i \leftarrow (v_i + v_j) / 2$
+- **Recurrent weights**: averaged (or preserved if only one direction is non-zero) to maintain effective drive
+- **Input weights**: same averaging rule applied to $W_{in}$
+- **Readout weights**: $W_{out}[\cdot, i] \leftarrow W_{out}[\cdot, i] + W_{out}[\cdot, j]$, so the merged neuron's averaged state still produces the same output contribution
+
+Merging cascades until no remaining pair exceeds the threshold, producing a compressed reservoir.
+
+For **avalanche-critical reservoirs** — those whose recurrent dynamics produce neuronal avalanches with a power-law size distribution, which occurs when the branching ratio $\sigma \approx 1$ — the macro-scale dynamics are invariant under this transformation. The coarse-grained reservoir is a renormalization group fixed point: its avalanche statistics are scale-invariant, and the same readout trained on the original reservoir transfers without retraining. For non-critical reservoirs, dynamics change under coarse-graining and retraining is required.
+
+Use `spires_coarse_grain()` to produce a new, smaller reservoir from an existing one. The weight threshold can be set as a high percentile of the positive weight distribution to control how aggressively the network is compressed.
 
 ## Hyperparameter Optimization
 
@@ -272,6 +290,20 @@ spires_status spires_step(spires_reservoir *r, const double *u_t);
 double *spires_run(spires_reservoir *r, const double *input_series, size_t series_length);
 ```
 
+### Coarse-Graining
+
+```c
+/* Produce a smaller reservoir by merging neuron pairs whose recurrent weight
+ * exceeds weight_threshold. Returns a new reservoir via out_r; the original
+ * is unchanged. Caller must destroy out_r with spires_reservoir_destroy().
+ *
+ * The threshold is typically set as a high percentile of the positive weight
+ * distribution (e.g. the 99th percentile to merge only the top 1%). */
+spires_status spires_coarse_grain(const spires_reservoir *r,
+                                  double weight_threshold,
+                                  spires_reservoir **out_r);
+```
+
 ### Training
 
 ```c
@@ -317,6 +349,12 @@ size_t spires_num_neurons(const spires_reservoir *r);
 size_t spires_num_inputs(const spires_reservoir *r);
 size_t spires_num_outputs(const spires_reservoir *r);
 ```
+
+## References
+
+[1] Mastin, T. & Teuscher, C. Coarse-Graining Spiking Reservoirs: Reducing Reservoir Size While Preserving Critical Dynamics. *Northeast Journal of Complex Systems (NEJCS)* **7**(2), Article 2 (2025). https://doi.org/10.63562/2577-8439.1106
+
+[2] Mastin, T., Anderson, N., McNeal, S., Tubbin, M. & Teuscher, C. Fractional-order systems for neuromorphic computing: software and hardware opportunities and challenges. *npj Unconventional Computing* **3**, 24 (2026). https://doi.org/10.1038/s44335-026-00070-8
 
 ## License
 
