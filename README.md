@@ -83,13 +83,25 @@ $$W\_{out} = ({\Phi}^\intercal \Phi + \lambda I)^{-1} {\Phi}^\intercal Y,$$
 
 where $\lambda$ is a regularization parameter. This is the recommended training method — it is fast, deterministic, and produces good results for most tasks. Use `spires_train_ridge()`.
 
+### Recursive Least Squares (online)
+
+RLS is a second-order online method that maintains a running estimate of the inverse correlation matrix $P \in \mathbb{R}^{N \times N}$ and updates the output weights incrementally:
+
+$$\mathbf{k}[t] = \frac{P[t-1]\,\mathbf{v}(t)}{\lambda + \mathbf{v}(t)^\intercal P[t-1]\,\mathbf{v}(t)},$$
+
+$$W\_{out}[t] = W\_{out}[t-1] + \mathbf{e}(t)\,\mathbf{k}[t]^\intercal,$$
+
+$$P[t] = \frac{1}{\lambda}\left(P[t-1] - \mathbf{k}[t]\,\mathbf{v}(t)^\intercal P[t-1]\right),$$
+
+where $\lambda \in (0, 1]$ is a forgetting factor and $\mathbf{e}(t) = y\_{\text{target}}(t) - W\_{\text{out}}[t-1]\,\mathbf{v}(t)$ is the prediction error. $P$ is initialised as $P[0] = \delta^{-1} I$, where $\delta$ is a small positive constant controlling the strength of the initial prior. Compared to the delta rule, RLS converges in far fewer steps by using second-order curvature information. Use `spires_train_rls()`.
+
 ### Online Delta Rule
 
-For streaming applications where data arrives incrementally, the output weights can be updated one sample at a time:
+The delta rule updates output weights one step at a time with a single scaled outer product:
 
 $$W\_{out} \leftarrow W\_{out} + \mu \cdot \epsilon(t) \cdot \mathbf{v}(t)^\intercal,$$
 
-where $\mu$ is the learning rate and $\epsilon(t) = y\_{target}(t) - y(t)$ is the prediction error. Use `spires_train_online()`.
+where $\mu$ is the learning rate and $\epsilon(t) = y\_{target}(t) - y(t)$ is the prediction error. Unlike RLS, it requires no auxiliary matrices — memory overhead is $O(N)$ and per-step compute is $O(N \cdot D\_{out})$ regardless of reservoir size. Convergence is slower than RLS, but the minimal footprint makes it well suited to embedded or resource-constrained deployments where memory is more limiting than training efficiency. Use `spires_train_online()`.
 
 ## Hyperparameter Optimization
 
@@ -269,7 +281,18 @@ spires_status spires_train_ridge(spires_reservoir *r,
                                  const double *target_series,
                                  size_t series_length, double lambda);
 
-/* Online delta rule: single-step weight update. */
+/* Recursive least squares: second-order online method, processes the full series
+ * sequentially. delta initialises P = (1/delta)*I; lambda is the forgetting factor
+ * in (0, 1] (use 1.0 for no forgetting). Converges faster than the delta rule at
+ * the cost of O(N^2) memory for the inverse correlation matrix. */
+spires_status spires_train_rls(spires_reservoir *r,
+                               const double *input_series,
+                               const double *target_series,
+                               size_t series_length,
+                               double delta, double lambda);
+
+/* Online delta rule: single-step weight update. O(N) memory; suited to embedded
+ * or resource-constrained deployments where footprint matters more than convergence speed. */
 spires_status spires_train_online(spires_reservoir *r,
                                   const double *target_vec, double lr);
 ```
