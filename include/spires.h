@@ -115,6 +115,10 @@ spires_status spires_train_rls(spires_reservoir *r,
                                size_t series_length,
                                double delta, double lambda);
 
+spires_status spires_coarse_grain(const spires_reservoir *r,
+                                  double weight_threshold,
+                                  spires_reservoir **out_r);
+
 /* ----------------------------
  * State access
  * ---------------------------- */
@@ -133,6 +137,16 @@ spires_status spires_read_reservoir_state(spires_reservoir *r, double *buffer);
  * spikes from that timestep. No allocation.
  */
 spires_status spires_read_spike_state(spires_reservoir *r, double *buffer);
+
+/* Returns a newly malloc'd copy of the recurrent weight matrix W
+ * (length = num_neurons * num_neurons, row-major). Caller must free().
+ */
+double *spires_copy_weights(const spires_reservoir *r);
+
+/* Reads the recurrent weight matrix W into a caller-provided buffer
+ * (length = num_neurons * num_neurons, row-major). No allocation.
+ */
+spires_status spires_read_weights(const spires_reservoir *r, double *buffer);
 
 /* Compute current readout y = W_out * state (+ b). 
  * Caller provides an array sized to num_outputs. */

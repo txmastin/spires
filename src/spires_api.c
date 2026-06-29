@@ -174,6 +174,21 @@ spires_status spires_read_spike_state(spires_reservoir *r, double *buffer)
     return SPIRES_OK;
 }
 
+double *spires_copy_weights(const spires_reservoir *r)
+{
+    if (!r || !r->impl)
+        return NULL;
+    return copy_reservoir_weights(r->impl);
+}
+
+spires_status spires_read_weights(const spires_reservoir *r, double *buffer)
+{
+    if (!r || !r->impl || !buffer)
+        return SPIRES_ERR_INVALID_ARG;
+    read_reservoir_weights(r->impl, buffer);
+    return SPIRES_OK;
+}
+
 spires_status spires_compute_output(spires_reservoir *r, double *out)
 {
     if (!r || !r->impl || !out)
@@ -183,6 +198,28 @@ spires_status spires_compute_output(spires_reservoir *r, double *out)
     if (compute_output(r->impl, out) != 0)
         return SPIRES_ERR_INTERNAL;
 
+    return SPIRES_OK;
+}
+
+/* --------------- coarse-graining --------------- */
+spires_status spires_coarse_grain(const spires_reservoir *r,
+                                  double weight_threshold,
+                                  spires_reservoir **out_r)
+{
+    if (!r || !r->impl || !out_r)
+        return SPIRES_ERR_INVALID_ARG;
+
+    struct reservoir *impl = coarse_grain_reservoir(r->impl, weight_threshold);
+    if (!impl)
+        return SPIRES_ERR_INTERNAL;
+
+    spires_reservoir *new_r = malloc(sizeof(*new_r));
+    if (!new_r) {
+        free_reservoir(impl);
+        return SPIRES_ERR_ALLOC;
+    }
+    new_r->impl = impl;
+    *out_r = new_r;
     return SPIRES_OK;
 }
 

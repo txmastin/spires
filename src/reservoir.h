@@ -52,5 +52,8 @@ void train_output_rls(struct reservoir *reservoir, double *input_series,
                       double *target_series, size_t series_length,
                       double delta, double lambda);
 void reset_reservoir(struct reservoir *reservoir);
+struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weight_threshold);
+double *copy_reservoir_weights(const struct reservoir *r);
+void    read_reservoir_weights(const struct reservoir *r, double *buffer);
 #endif // RESERVOIR_H
 

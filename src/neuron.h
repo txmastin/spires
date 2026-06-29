@@ -20,6 +20,7 @@ void* init_neuron(enum neuron_type type, double *neuron_params, double dt, void 
 void update_neuron(void *neuron, enum neuron_type type, double input, double dt);
 void free_neuron(void *neuron, enum neuron_type type);
 double get_neuron_state(void *neuron, enum neuron_type type);
+void set_neuron_state(void *neuron, enum neuron_type type, double V);
 double get_neuron_spike(void *neuron, enum neuron_type type);
 
 #endif // NEURON_H

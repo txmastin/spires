@@ -110,7 +110,30 @@ double get_neuron_state(void *neuron, enum neuron_type type)
     return val;
 }
 
-double get_neuron_spike(void *neuron, enum neuron_type type) 
+void set_neuron_state(void *neuron, enum neuron_type type, double V)
+{
+    switch(type) {
+        case LIF_DISCRETE:
+            ((struct lif_discrete_neuron *)neuron)->V = V;
+            break;
+        case LIF_BIO:
+            ((struct lif_bio_neuron *)neuron)->V = V;
+            break;
+        case FLIF_CAPUTO:
+            ((struct flif_caputo_neuron *)neuron)->V = V;
+            break;
+        case FLIF_GL:
+            ((struct flif_gl_neuron *)neuron)->V = V;
+            break;
+        case FLIF_DIFFUSIVE:
+            ((struct flif_diffusive_neuron *)neuron)->V = V;
+            break;
+        default:
+            _handle_unknown_neuron_type(__func__);
+    }
+}
+
+double get_neuron_spike(void *neuron, enum neuron_type type)
 {
     double spike; 
     switch(type) {

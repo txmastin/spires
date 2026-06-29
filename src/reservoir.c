@@ -758,7 +758,7 @@ void train_output_rls(struct reservoir *reservoir, double *input_series,
 }
 
 // Function to reset neurons in reservoir (helpful for fractional order neuron models)
-void reset_reservoir(struct reservoir *reservoir) 
+void reset_reservoir(struct reservoir *reservoir)
 {
     if (reservoir == NULL) {
         fprintf(stderr, "Error resetting reservoir. Reservoir not initialized!\n");
@@ -768,4 +768,208 @@ void reset_reservoir(struct reservoir *reservoir)
         free_neuron(reservoir->neurons[i], reservoir->neuron_type);
         reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params, reservoir->dt, &local_ptr);
     }
+}
+
+struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weight_threshold)
+{
+    if (!r) {
+        fprintf(stderr, "Error in coarse-graining: reservoir is NULL.\n");
+        return NULL;
+    }
+
+    size_t num_neurons = r->num_neurons;
+    size_t num_inputs  = r->num_inputs;
+    size_t num_outputs = r->num_outputs;
+
+    double *W_work = malloc(num_neurons * num_neurons * sizeof(double));
+    if (!W_work) {
+        fprintf(stderr, "Failed to allocate W working copy for coarse-graining.\n");
+        return NULL;
+    }
+
+    double *W_in_work = malloc(num_neurons * num_inputs * sizeof(double));
+    if (!W_in_work) {
+        fprintf(stderr, "Failed to allocate W_in working copy for coarse-graining.\n");
+        free(W_work);
+        return NULL;
+    }
+
+    double *V = malloc(num_neurons * sizeof(double));
+    if (!V) {
+        fprintf(stderr, "Failed to allocate neuron state buffer for coarse-graining.\n");
+        free(W_work); free(W_in_work);
+        return NULL;
+    }
+
+    int *alive = malloc(num_neurons * sizeof(int));
+    if (!alive) {
+        fprintf(stderr, "Failed to allocate alive array for coarse-graining.\n");
+        free(W_work); free(W_in_work); free(V);
+        return NULL;
+    }
+
+    double *W_out_work = malloc(num_outputs * num_neurons * sizeof(double));
+    if (!W_out_work) {
+        fprintf(stderr, "Failed to allocate W_out working copy for coarse-graining.\n");
+        free(W_work); free(W_in_work); free(V); free(alive);
+        return NULL;
+    }
+
+    memcpy(W_work, r->W, num_neurons * num_neurons * sizeof(double));
+    memcpy(W_in_work, r->W_in, num_neurons * num_inputs * sizeof(double));
+    memcpy(W_out_work, r->W_out, num_outputs * num_neurons * sizeof(double));
+    for (size_t i = 0; i < num_neurons; i++) {
+        V[i]     = get_neuron_state(r->neurons[i], r->neuron_type);
+        alive[i] = 1;
+    }
+
+    int merged = 1;
+    while (merged) {
+        merged = 0;
+        for (size_t i = 0; i < num_neurons; i++) {
+            for (size_t j = i + 1; j < num_neurons; j++) {
+                if (W_work[i * num_neurons + j] <= weight_threshold &&
+                    W_work[j * num_neurons + i] <= weight_threshold)
+                    continue;
+
+                merged = 1;
+
+                V[i] = (V[i] + V[j]) / 2.0;
+                V[j] = 0.0;
+                alive[j] = 0;
+
+                for (size_t k = 0; k < num_neurons; k++) {
+                    if (k == i || k == j)
+                        continue;
+                    double w_ik = W_work[i * num_neurons + k];
+                    double w_jk = W_work[j * num_neurons + k];
+                    double new_w = (w_ik * w_jk == 0.0) ? w_ik + w_jk
+                                                         : (w_ik + w_jk) / 2.0;
+                    W_work[i * num_neurons + k] = new_w;
+                    W_work[k * num_neurons + i] = new_w;
+                }
+
+                for (size_t k = 0; k < num_inputs; k++) {
+                    double w_ik = W_in_work[i * num_inputs + k];
+                    double w_jk = W_in_work[j * num_inputs + k];
+                    W_in_work[i * num_inputs + k] = (w_ik * w_jk == 0.0) ? w_ik + w_jk
+                                                                           : (w_ik + w_jk) / 2.0;
+                    W_in_work[j * num_inputs + k] = 0.0;
+                }
+
+                for (size_t o = 0; o < num_outputs; o++) {
+                    W_out_work[o * num_neurons + i] += W_out_work[o * num_neurons + j];
+                    W_out_work[o * num_neurons + j]  = 0.0;
+                }
+
+                for (size_t k = 0; k < num_neurons; k++) {
+                    W_work[j * num_neurons + k] = 0.0;
+                    W_work[k * num_neurons + j] = 0.0;
+                }
+            }
+        }
+    }
+
+    size_t num_super = 0;
+    for (size_t i = 0; i < num_neurons; i++) {
+        if (alive[i])
+            num_super++;
+    }
+
+    size_t *old_to_new = malloc(num_neurons * sizeof(size_t));
+    if (!old_to_new) {
+        fprintf(stderr, "Failed to allocate index map for coarse-grained reservoir.\n");
+        free(W_work); free(W_in_work); free(W_out_work); free(V); free(alive);
+        return NULL;
+    }
+
+    size_t idx = 0;
+    for (size_t i = 0; i < num_neurons; i++)
+        old_to_new[i] = alive[i] ? idx++ : (size_t)-1;
+
+    double *W_new = calloc(num_super * num_super, sizeof(double));
+    if (!W_new) {
+        fprintf(stderr, "Failed to allocate recurrent weights for coarse-grained reservoir.\n");
+        free(W_work); free(W_in_work); free(W_out_work); free(V); free(alive); free(old_to_new);
+        return NULL;
+    }
+
+    double *W_in_new = calloc(num_super * num_inputs, sizeof(double));
+    if (!W_in_new) {
+        fprintf(stderr, "Failed to allocate input weights for coarse-grained reservoir.\n");
+        free(W_work); free(W_in_work); free(W_out_work); free(V); free(alive); free(old_to_new);
+        free(W_new);
+        return NULL;
+    }
+
+    double *W_out_new = calloc(num_outputs * num_super, sizeof(double));
+    if (!W_out_new) {
+        fprintf(stderr, "Failed to allocate output weights for coarse-grained reservoir.\n");
+        free(W_work); free(W_in_work); free(W_out_work); free(V); free(alive); free(old_to_new);
+        free(W_new); free(W_in_new);
+        return NULL;
+    }
+
+    for (size_t i = 0; i < num_neurons; i++) {
+        if (!alive[i])
+            continue;
+        size_t ni = old_to_new[i];
+        for (size_t j = 0; j < num_neurons; j++) {
+            if (!alive[j])
+                continue;
+            W_new[ni * num_super + old_to_new[j]] = W_work[i * num_neurons + j];
+        }
+        for (size_t k = 0; k < num_inputs; k++)
+            W_in_new[ni * num_inputs + k] = W_in_work[i * num_inputs + k];
+        for (size_t o = 0; o < num_outputs; o++)
+            W_out_new[o * num_super + ni] = W_out_work[o * num_neurons + i];
+    }
+
+    free(W_work); free(W_in_work); free(W_out_work); free(old_to_new);
+
+    struct reservoir *new_r = create_reservoir(
+        num_super, num_inputs, num_outputs,
+        r->spectral_radius, r->ei_ratio, r->input_strength,
+        r->connectivity, r->dt,
+        r->connectivity_type, r->neuron_type, r->neuron_params);
+    if (!new_r) {
+        fprintf(stderr, "Failed to create coarse-grained reservoir.\n");
+        free(W_new); free(W_in_new); free(W_out_new); free(V); free(alive);
+        return NULL;
+    }
+
+    new_r->W     = W_new;
+    new_r->W_in  = W_in_new;
+    new_r->W_out = W_out_new;
+
+    idx = 0;
+    for (size_t i = 0; i < num_neurons; i++) {
+        if (!alive[i])
+            continue;
+        set_neuron_state(new_r->neurons[idx], new_r->neuron_type, V[i]);
+        idx++;
+    }
+
+    free(V); free(alive);
+
+    return new_r;
+}
+
+double *copy_reservoir_weights(const struct reservoir *r)
+{
+    if (!r || !r->W)
+        return NULL;
+    size_t n = r->num_neurons;
+    double *buf = malloc(n * n * sizeof(double));
+    if (!buf)
+        return NULL;
+    memcpy(buf, r->W, n * n * sizeof(double));
+    return buf;
+}
+
+void read_reservoir_weights(const struct reservoir *r, double *buffer)
+{
+    if (!r || !r->W || !buffer)
+        return;
+    memcpy(buffer, r->W, r->num_neurons * r->num_neurons * sizeof(double));
 }
