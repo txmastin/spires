@@ -54,7 +54,8 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
                                               ntype,
                                               cfg->neuron_params,
                                               stype,
-                                              sbackend);
+                                              sbackend,
+                                              cfg->synapse_params);
     if (!impl)
         return SPIRES_ERR_INTERNAL;
 

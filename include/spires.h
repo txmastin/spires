@@ -50,18 +50,28 @@ typedef enum {
     SPIRES_NEURON_FLIF_DIFFUSIVE
 } spires_neuron_type;
 
-/* Which synapse model governs the recurrent connections. Only one exists today
- * (SPIRES_SYNAPSE_SIMPLE = plain weights); future hot-swappable models
- * (distributional, biorealistic, memcapacitive, ...) are a separate, later
- * effort. Distinct from spires_connectivity_type, which decides the topology
- * (who's connected to whom) rather than how a connection's weight is modeled. */
+/* Which synapse model governs the recurrent connections. Distinct from
+ * spires_connectivity_type, which decides the topology (who's connected to
+ * whom) rather than how a connection's weight is modeled. Future hot-swappable
+ * models (distributional, biorealistic, memcapacitive, ...) are a separate,
+ * later effort.
+ *
+ * synapse_params layout (see spires_reservoir_config.synapse_params below):
+ *   SPIRES_SYNAPSE_SIMPLE:              unused.
+ *   SPIRES_SYNAPSE_PSC_HOMOGENEOUS:      params[0] = tau_syn (shared by all
+ *                                        connections; exponential PSC filter).
+ *   SPIRES_SYNAPSE_PSC_HETEROGENEOUS:    params[0] = tau_min, params[1] =
+ *                                        tau_max (per-connection tau sampled
+ *                                        log-uniform on [tau_min, tau_max]). */
 typedef enum {
-    SPIRES_SYNAPSE_SIMPLE = 0
+    SPIRES_SYNAPSE_SIMPLE = 0,
+    SPIRES_SYNAPSE_PSC_HOMOGENEOUS,
+    SPIRES_SYNAPSE_PSC_HETEROGENEOUS
 } spires_synapse_type;
 
-/* Storage/compute backend, only meaningful within SPIRES_SYNAPSE_SIMPLE today.
- * Explicit, user-selectable choice (not auto-switched): SPARSE (CSR) wins at
- * low connectivity (typical reservoir-computing topologies); DENSE (BLAS) can
+/* Storage/compute backend, applies to all synapse types above. Explicit,
+ * user-selectable choice (not auto-switched): SPARSE (CSR) wins at low
+ * connectivity (typical reservoir-computing topologies); DENSE (BLAS) can
  * win at higher connectivity. */
 typedef enum {
     SPIRES_SYNAPSE_SPARSE = 0,
@@ -86,6 +96,7 @@ typedef struct {
     double *neuron_params;        /* forwarded to init_neuron; caller owns */
     spires_synapse_type      synapse_type;    /* default 0 = SPIRES_SYNAPSE_SIMPLE */
     spires_synapse_backend   synapse_backend; /* default 0 = SPIRES_SYNAPSE_SPARSE */
+    double *synapse_params;       /* forwarded as-is; layout documented above per synapse_type; caller owns */
 } spires_reservoir_config;
 
 /* ----------------------------

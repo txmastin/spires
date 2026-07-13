@@ -1,13 +1,14 @@
 # -------- paths --------
 SRC_DIR      := src
 NEURON_DIR   := $(SRC_DIR)/neurons
+SYNAPSE_DIR  := $(SRC_DIR)/synapses
 BUILD_DIR    := build
 LIB_DIR      := lib
 
 # -------- tools/flags --------
 CC      := clang
 CFLAGS  := -O2 -Wall -Wextra -Wpedantic -Wshadow -g -fopenmp
-INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR)
+INCLUDES := -Iinclude -I$(SRC_DIR) -I$(NEURON_DIR) -I$(SYNAPSE_DIR)
 INCLUDES += -I/usr/include/openblas
 
 # (Portable option: pkg-config; uncomment if available)
@@ -25,7 +26,8 @@ SRCS := \
   $(SRC_DIR)/spires_api.c \
   $(SRC_DIR)/agile.c \
   $(SRC_DIR)/spires_opt_agile.c \
-  $(wildcard $(NEURON_DIR)/*.c)
+  $(wildcard $(NEURON_DIR)/*.c) \
+  $(wildcard $(SYNAPSE_DIR)/*.c)
 
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
