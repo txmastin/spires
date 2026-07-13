@@ -9,6 +9,7 @@
 // #include "spires.h"
 #include "reservoir.h"
 #include "math_utils.h"
+#include "sparse.h"
 
 
 
@@ -143,12 +144,8 @@ void step_reservoir(struct reservoir *r, const double *input_vector)
     for (int t = 0; t < num_micro_steps; t++) {
         #pragma omp parallel for // omp ftw
         for (size_t i = 0; i < num_neurons; i++) {
-           // --- OPTIMIZATION using cblas_ddot ---
-            // Get a pointer to the start of the i-th row of the weight matrix W
-            const double *W_row = &r->W[i * num_neurons];
-
-            // Calculate the dot product: recurrent_input = W_row • last_spikes
-            double recurrent_input = cblas_ddot(num_neurons, W_row, 1, last_spikes, 1);
+            // Sparse dot product: recurrent_input = W_row • last_spikes, skipping zeros
+            double recurrent_input = csr_row_dot(&r->W, i, last_spikes);
 
             double total_input = external_inputs[i] + recurrent_input;
             update_neuron(r->neurons[i], r->neuron_type, total_input, r->dt);
@@ -292,10 +289,9 @@ void free_reservoir(struct reservoir *reservoir)
     free(reservoir->neurons);
     free(reservoir->W_in);
     free(reservoir->W_out);
-    free(reservoir->W);
+    csr_free(&reservoir->W);
     reservoir->W_in = NULL;
     reservoir->W_out = NULL;
-    reservoir->W = NULL;
     free(reservoir);
     reservoir = NULL;
 }
@@ -333,9 +329,9 @@ static inline int has_edge(const double *W, size_t n, size_t i, size_t j)
     return W[i * n + j] != 0.0;
 }
 
-static inline void add_edge(struct reservoir *r, size_t i, size_t j)
+static inline void add_edge(double *W_dense, size_t n, double ei_ratio, size_t i, size_t j)
 {
-    r->W[i * r->num_neurons + j] = generate_weight(r->ei_ratio);
+    W_dense[i * n + j] = generate_weight(ei_ratio);
 }
 
 int init_weights(struct reservoir *reservoir)
@@ -357,10 +353,12 @@ int init_weights(struct reservoir *reservoir)
         return EXIT_FAILURE;
     }
 
-    /* zero init recurrent weights; unassigned stay 0.0 */
-    reservoir->W = calloc(reservoir->num_neurons * reservoir->num_neurons, sizeof(double));
-    if (!reservoir->W) {
-        fprintf(stderr, "Error allocating memory for W, size of reservoir: %zu\n",
+    /* zero init recurrent weights scratch buffer; unassigned stay 0.0.
+     * Topology generation below fills this dense buffer exactly as before;
+     * it is converted to sparse CSR storage at the end of this function. */
+    double *W_dense = calloc(reservoir->num_neurons * reservoir->num_neurons, sizeof(double));
+    if (!W_dense) {
+        fprintf(stderr, "Error allocating scratch memory for W, size of reservoir: %zu\n",
                 reservoir->num_neurons);
         free(reservoir->W_in);
         free(reservoir->W_out);
@@ -385,7 +383,7 @@ int init_weights(struct reservoir *reservoir)
                     if (i == j)
                         continue;
                     if (urand01() < reservoir->connectivity)
-                        add_edge(reservoir, i, j);
+                        add_edge(W_dense, n, reservoir->ei_ratio, i, j);
                 }
             }
         } break;
@@ -411,7 +409,7 @@ int init_weights(struct reservoir *reservoir)
                 for (int s = 1; s <= half; s++) {
                     size_t j = (i + (size_t)s) % n;   /* forward neighbor */
                     if (i == j) continue;
-                    add_edge(reservoir, i, j);
+                    add_edge(W_dense, n, reservoir->ei_ratio, i, j);
                 }
             }
             /* 2) rewire each (i -> i+s) with prob p to a random j != i, no duplicate edges */
@@ -420,7 +418,7 @@ int init_weights(struct reservoir *reservoir)
                     size_t j_old = (i + (size_t)s) % n;
                     if (urand01() < p) {
                         /* drop old edge */
-                        reservoir->W[i * n + j_old] = 0.0;
+                        W_dense[i * n + j_old] = 0.0;
                         /* choose a new target j_new */
                         size_t j_new;
                         int attempts = 0;
@@ -428,9 +426,9 @@ int init_weights(struct reservoir *reservoir)
                             j_new = (size_t)(urand01() * (double)n);
                             if (j_new >= n) j_new = n - 1;
                             if (++attempts > 10 * (int)n) break; /* fail-safe */
-                        } while (j_new == i || has_edge(reservoir->W, n, i, j_new));
+                        } while (j_new == i || has_edge(W_dense, n, i, j_new));
                         if (j_new != i)
-                            add_edge(reservoir, i, j_new);
+                            add_edge(W_dense, n, reservoir->ei_ratio, i, j_new);
                     }
                 }
             }
@@ -518,9 +516,9 @@ int init_weights(struct reservoir *reservoir)
                 for (size_t j = i + 1; j < n; j++) {
                     if (!adj[i * n + j]) continue;
                     if (urand01() < 0.5) {
-                        reservoir->W[i * n + j] = generate_weight(reservoir->ei_ratio);
+                        W_dense[i * n + j] = generate_weight(reservoir->ei_ratio);
                     } else {
-                        reservoir->W[j * n + i] = generate_weight(reservoir->ei_ratio);
+                        W_dense[j * n + i] = generate_weight(reservoir->ei_ratio);
                     }
                 }
             }
@@ -530,6 +528,9 @@ int init_weights(struct reservoir *reservoir)
         } break;
     }
 
+    reservoir->W = csr_build_from_dense(W_dense, reservoir->num_neurons);
+    free(W_dense);
+
     return EXIT_SUCCESS;
 }
 
@@ -537,12 +538,10 @@ int init_weights(struct reservoir *reservoir)
 int rescale_weights(struct reservoir *reservoir) 
 {
     // rescale weights to ensure spectral radius
-    double current_spectral_radius = calc_spectral_radius(reservoir->W, reservoir->num_neurons);
+    double current_spectral_radius = csr_spectral_radius(&reservoir->W, reservoir->num_neurons);
     if (current_spectral_radius > 1e-9) { // avoid division by zero
-        double rescaling_factor = reservoir->spectral_radius / current_spectral_radius; 
-        for (size_t i = 0; i < (reservoir->num_neurons * reservoir->num_neurons); i++) {
-                reservoir->W[i] *= rescaling_factor;
-        }
+        double rescaling_factor = reservoir->spectral_radius / current_spectral_radius;
+        csr_scale(&reservoir->W, rescaling_factor);
     }
     return EXIT_SUCCESS;
 }
@@ -815,7 +814,7 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
         return NULL;
     }
 
-    memcpy(W_work, r->W, num_neurons * num_neurons * sizeof(double));
+    csr_to_dense(&r->W, W_work);
     memcpy(W_in_work, r->W_in, num_neurons * num_inputs * sizeof(double));
     memcpy(W_out_work, r->W_out, num_outputs * num_neurons * sizeof(double));
     for (size_t i = 0; i < num_neurons; i++) {
@@ -938,7 +937,8 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
         return NULL;
     }
 
-    new_r->W     = W_new;
+    new_r->W = csr_build_from_dense(W_new, num_super);
+    free(W_new);
     new_r->W_in  = W_in_new;
     new_r->W_out = W_out_new;
 
@@ -957,19 +957,19 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
 
 double *copy_reservoir_weights(const struct reservoir *r)
 {
-    if (!r || !r->W)
+    if (!r || !r->W.row_ptr)
         return NULL;
     size_t n = r->num_neurons;
     double *buf = malloc(n * n * sizeof(double));
     if (!buf)
         return NULL;
-    memcpy(buf, r->W, n * n * sizeof(double));
+    csr_to_dense(&r->W, buf);
     return buf;
 }
 
 void read_reservoir_weights(const struct reservoir *r, double *buffer)
 {
-    if (!r || !r->W || !buffer)
+    if (!r || !r->W.row_ptr || !buffer)
         return;
-    memcpy(buffer, r->W, r->num_neurons * r->num_neurons * sizeof(double));
+    csr_to_dense(&r->W, buffer);
 }

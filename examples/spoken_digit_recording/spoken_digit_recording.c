@@ -7,6 +7,7 @@
 #include <spires.h>
 #include "reservoir.h"
 #include "neuron.h"
+#include "sparse.h"
 
 /*
  * Local mirror of the opaque handle — must match the definition in spires_api.c.
@@ -185,9 +186,7 @@ static void record_inference_csvs(spires_reservoir *res,
 
         for (int micro = 0; micro < num_micro_steps; micro++) {
             for (size_t i = 0; i < num_neurons; i++) {
-                double recurrent = cblas_ddot((int)num_neurons,
-                                              &impl->W[i * num_neurons], 1,
-                                              last_spikes, 1);
+                double recurrent = csr_row_dot(&impl->W, i, last_spikes);
                 update_neuron(impl->neurons[i], impl->neuron_type,
                               ext_input[i] + recurrent, impl->dt);
                 new_spikes[i] = get_neuron_spike(impl->neurons[i], impl->neuron_type);
@@ -212,13 +211,21 @@ static void record_inference_csvs(spires_reservoir *res,
         fprintf(stderr, "Error: could not open adjacency_matrix.csv\n");
         goto cleanup;
     }
+    double *W_dense = malloc(num_neurons * num_neurons * sizeof(double));
+    if (!W_dense) {
+        fprintf(stderr, "Error: allocation failed for adjacency matrix dump\n");
+        fclose(f_adj);
+        goto cleanup;
+    }
+    csr_to_dense(&impl->W, W_dense);
     for (size_t i = 0; i < num_neurons; i++) {
         for (size_t j = 0; j < num_neurons; j++) {
             fprintf(f_adj, "%.6f%s",
-                    impl->W[i * num_neurons + j],
+                    W_dense[i * num_neurons + j],
                     j + 1 < num_neurons ? "," : "\n");
         }
     }
+    free(W_dense);
     fclose(f_adj);
 
     printf("Wrote %d rows (SEQUENCE_LENGTH=%d x %d micro-steps) to "

@@ -41,6 +41,7 @@ extern "C" {
 #endif
 
 #include <stddef.h>
+#include <stdint.h>
 
 struct flif_diffusive_neuron {
     // Parameters (double precision)
@@ -64,7 +65,7 @@ struct flif_diffusive_neuron {
     double g_euler;           // dt / tau_m
 
     // RNG state (SplitMix64)
-    unsigned long long rng;
+    uint64_t rng;
 };
 
 // API (double throughout)
