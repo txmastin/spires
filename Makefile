@@ -19,6 +19,7 @@ INCLUDES += -I/usr/include/openblas
 SRCS := \
   $(SRC_DIR)/math_utils.c \
   $(SRC_DIR)/sparse.c     \
+  $(SRC_DIR)/synapse.c    \
   $(SRC_DIR)/neuron.c     \
   $(SRC_DIR)/reservoir.c  \
   $(SRC_DIR)/spires_api.c \

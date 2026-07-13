@@ -9,6 +9,7 @@
 /* Private backend headers */
 #include "reservoir.h"
 #include "neuron.h"
+#include "synapse.h"
 #include "spires_opt_agile.h"
 
 
@@ -38,6 +39,8 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
 
     enum connectivity_type conn = (enum connectivity_type)cfg->connectivity_type;
     enum neuron_type ntype = (enum neuron_type)cfg->neuron_type;
+    enum synapse_type stype = (enum synapse_type)cfg->synapse_type;
+    enum synapse_backend sbackend = (enum synapse_backend)cfg->synapse_backend;
 
     struct reservoir *impl = create_reservoir(cfg->num_neurons,
                                               cfg->num_inputs,
@@ -49,7 +52,9 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
                                               cfg->dt,           /* same dt flows to backend */
                                               conn,
                                               ntype,
-                                              cfg->neuron_params);
+                                              cfg->neuron_params,
+                                              stype,
+                                              sbackend);
     if (!impl)
         return SPIRES_ERR_INTERNAL;
 

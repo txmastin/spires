@@ -7,7 +7,7 @@
 #include <spires.h>
 #include "reservoir.h"
 #include "neuron.h"
-#include "sparse.h"
+#include "synapse.h"
 
 /*
  * Local mirror of the opaque handle — must match the definition in spires_api.c.
@@ -186,7 +186,7 @@ static void record_inference_csvs(spires_reservoir *res,
 
         for (int micro = 0; micro < num_micro_steps; micro++) {
             for (size_t i = 0; i < num_neurons; i++) {
-                double recurrent = csr_row_dot(&impl->W, i, last_spikes);
+                double recurrent = synapse_row_dot(&impl->W, i, last_spikes);
                 update_neuron(impl->neurons[i], impl->neuron_type,
                               ext_input[i] + recurrent, impl->dt);
                 new_spikes[i] = get_neuron_spike(impl->neurons[i], impl->neuron_type);
@@ -217,7 +217,7 @@ static void record_inference_csvs(spires_reservoir *res,
         fclose(f_adj);
         goto cleanup;
     }
-    csr_to_dense(&impl->W, W_dense);
+    synapse_to_dense(&impl->W, W_dense);
     for (size_t i = 0; i < num_neurons; i++) {
         for (size_t j = 0; j < num_neurons; j++) {
             fprintf(f_adj, "%.6f%s",

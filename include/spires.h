@@ -50,6 +50,24 @@ typedef enum {
     SPIRES_NEURON_FLIF_DIFFUSIVE
 } spires_neuron_type;
 
+/* Which synapse model governs the recurrent connections. Only one exists today
+ * (SPIRES_SYNAPSE_SIMPLE = plain weights); future hot-swappable models
+ * (distributional, biorealistic, memcapacitive, ...) are a separate, later
+ * effort. Distinct from spires_connectivity_type, which decides the topology
+ * (who's connected to whom) rather than how a connection's weight is modeled. */
+typedef enum {
+    SPIRES_SYNAPSE_SIMPLE = 0
+} spires_synapse_type;
+
+/* Storage/compute backend, only meaningful within SPIRES_SYNAPSE_SIMPLE today.
+ * Explicit, user-selectable choice (not auto-switched): SPARSE (CSR) wins at
+ * low connectivity (typical reservoir-computing topologies); DENSE (BLAS) can
+ * win at higher connectivity. */
+typedef enum {
+    SPIRES_SYNAPSE_SPARSE = 0,
+    SPIRES_SYNAPSE_DENSE
+} spires_synapse_backend;
+
 /* ----------------------------
  * Creation-time configuration
  * (kept minimal; forwards to create_reservoir(...) as-is)
@@ -66,6 +84,8 @@ typedef struct {
     spires_connectivity_type connectivity_type;
     spires_neuron_type       neuron_type;
     double *neuron_params;        /* forwarded to init_neuron; caller owns */
+    spires_synapse_type      synapse_type;    /* default 0 = SPIRES_SYNAPSE_SIMPLE */
+    spires_synapse_backend   synapse_backend; /* default 0 = SPIRES_SYNAPSE_SPARSE */
 } spires_reservoir_config;
 
 /* ----------------------------

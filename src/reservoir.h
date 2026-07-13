@@ -2,7 +2,7 @@
 #define RESERVOIR_H
 
 #include "neuron.h"
-#include "sparse.h"
+#include "synapse.h"
 
 enum connectivity_type {
     RANDOM,
@@ -22,17 +22,20 @@ struct reservoir {
     double dt;
     double *W_in;
     double *W_out;
-    struct csr_matrix W;
+    struct synapse_matrix W;
     double *shared_neuron_data; // optionally used in some neuron types
     enum connectivity_type connectivity_type;
     enum neuron_type neuron_type;
+    enum synapse_type synapse_type;
+    enum synapse_backend synapse_backend;
     double *neuron_params;
 };
 
 struct reservoir* create_reservoir(
     size_t num_neurons, size_t num_inputs, size_t num_outputs,
     double spectral_radius, double ei_ratio, double input_strength, double connectivity, double dt,
-    enum connectivity_type connectivity_type, enum neuron_type neuron_type, double *neuron_params);
+    enum connectivity_type connectivity_type, enum neuron_type neuron_type, double *neuron_params,
+    enum synapse_type synapse_type, enum synapse_backend synapse_backend);
 
 int compute_output(struct reservoir *reservoir, double *output_vector);
 double compute_activity(struct reservoir *reservoir);

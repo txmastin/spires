@@ -9,16 +9,17 @@
 // #include "spires.h"
 #include "reservoir.h"
 #include "math_utils.h"
-#include "sparse.h"
+#include "synapse.h"
 
 
 
 /* **** create reservoir ***** */
 
-struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t num_outputs, 
-                                double spectral_radius, double ei_ratio, double input_strength, 
-                                double connectivity, double dt, enum connectivity_type connectivity_type, 
-                                enum neuron_type neuron_type, double *neuron_params) 
+struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t num_outputs,
+                                double spectral_radius, double ei_ratio, double input_strength,
+                                double connectivity, double dt, enum connectivity_type connectivity_type,
+                                enum neuron_type neuron_type, double *neuron_params,
+                                enum synapse_type synapse_type, enum synapse_backend synapse_backend)
 {
 
     struct reservoir *reservoir = malloc(sizeof(*reservoir));
@@ -38,6 +39,8 @@ struct reservoir *create_reservoir(size_t num_neurons, size_t num_inputs, size_t
     reservoir->connectivity_type = connectivity_type;
     reservoir->neuron_type = neuron_type;
     reservoir->neuron_params = neuron_params;
+    reservoir->synapse_type = synapse_type;
+    reservoir->synapse_backend = synapse_backend;
     
     
     reservoir->neurons = malloc(num_neurons * sizeof(void*));
@@ -145,7 +148,7 @@ void step_reservoir(struct reservoir *r, const double *input_vector)
         #pragma omp parallel for // omp ftw
         for (size_t i = 0; i < num_neurons; i++) {
             // Sparse dot product: recurrent_input = W_row • last_spikes, skipping zeros
-            double recurrent_input = csr_row_dot(&r->W, i, last_spikes);
+            double recurrent_input = synapse_row_dot(&r->W, i, last_spikes);
 
             double total_input = external_inputs[i] + recurrent_input;
             update_neuron(r->neurons[i], r->neuron_type, total_input, r->dt);
@@ -289,7 +292,7 @@ void free_reservoir(struct reservoir *reservoir)
     free(reservoir->neurons);
     free(reservoir->W_in);
     free(reservoir->W_out);
-    csr_free(&reservoir->W);
+    synapse_free(&reservoir->W);
     reservoir->W_in = NULL;
     reservoir->W_out = NULL;
     free(reservoir);
@@ -528,7 +531,8 @@ int init_weights(struct reservoir *reservoir)
         } break;
     }
 
-    reservoir->W = csr_build_from_dense(W_dense, reservoir->num_neurons);
+    reservoir->W = synapse_build_from_dense(W_dense, reservoir->num_neurons,
+                                            reservoir->synapse_type, reservoir->synapse_backend);
     free(W_dense);
 
     return EXIT_SUCCESS;
@@ -538,10 +542,10 @@ int init_weights(struct reservoir *reservoir)
 int rescale_weights(struct reservoir *reservoir) 
 {
     // rescale weights to ensure spectral radius
-    double current_spectral_radius = csr_spectral_radius(&reservoir->W, reservoir->num_neurons);
+    double current_spectral_radius = synapse_spectral_radius(&reservoir->W);
     if (current_spectral_radius > 1e-9) { // avoid division by zero
         double rescaling_factor = reservoir->spectral_radius / current_spectral_radius;
-        csr_scale(&reservoir->W, rescaling_factor);
+        synapse_scale(&reservoir->W, rescaling_factor);
     }
     return EXIT_SUCCESS;
 }
@@ -814,7 +818,7 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
         return NULL;
     }
 
-    csr_to_dense(&r->W, W_work);
+    synapse_to_dense(&r->W, W_work);
     memcpy(W_in_work, r->W_in, num_neurons * num_inputs * sizeof(double));
     memcpy(W_out_work, r->W_out, num_outputs * num_neurons * sizeof(double));
     for (size_t i = 0; i < num_neurons; i++) {
@@ -930,14 +934,15 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
         num_super, num_inputs, num_outputs,
         r->spectral_radius, r->ei_ratio, r->input_strength,
         r->connectivity, r->dt,
-        r->connectivity_type, r->neuron_type, r->neuron_params);
+        r->connectivity_type, r->neuron_type, r->neuron_params,
+        r->synapse_type, r->synapse_backend);
     if (!new_r) {
         fprintf(stderr, "Failed to create coarse-grained reservoir.\n");
         free(W_new); free(W_in_new); free(W_out_new); free(V); free(alive);
         return NULL;
     }
 
-    new_r->W = csr_build_from_dense(W_new, num_super);
+    new_r->W = synapse_build_from_dense(W_new, num_super, r->W.type, r->W.backend);
     free(W_new);
     new_r->W_in  = W_in_new;
     new_r->W_out = W_out_new;
@@ -957,19 +962,19 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
 
 double *copy_reservoir_weights(const struct reservoir *r)
 {
-    if (!r || !r->W.row_ptr)
+    if (!r || !r->W.n)
         return NULL;
     size_t n = r->num_neurons;
     double *buf = malloc(n * n * sizeof(double));
     if (!buf)
         return NULL;
-    csr_to_dense(&r->W, buf);
+    synapse_to_dense(&r->W, buf);
     return buf;
 }
 
 void read_reservoir_weights(const struct reservoir *r, double *buffer)
 {
-    if (!r || !r->W.row_ptr || !buffer)
+    if (!r || !r->W.n || !buffer)
         return;
-    csr_to_dense(&r->W, buffer);
+    synapse_to_dense(&r->W, buffer);
 }
