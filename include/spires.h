@@ -62,11 +62,37 @@ typedef enum {
  *                                        connections; exponential PSC filter).
  *   SPIRES_SYNAPSE_PSC_HETEROGENEOUS:    params[0] = tau_min, params[1] =
  *                                        tau_max (per-connection tau sampled
- *                                        log-uniform on [tau_min, tau_max]). */
+ *                                        log-uniform on [tau_min, tau_max]).
+ *   SPIRES_SYNAPSE_FRACTIONAL:           params[0] = alpha (0,1], params[1] =
+ *                                        tau_syn, params[2] = T_mem (finite
+ *                                        memory-window truncation). Exact
+ *                                        GL-discretized fractional relaxation
+ *                                        equation for synaptic current,
+ *                                        tau_syn*D^alpha(I) = -I + spike(t) --
+ *                                        impulse response is the Mittag-Leffler
+ *                                        relaxation function, which reduces to
+ *                                        SPIRES_SYNAPSE_PSC_HOMOGENEOUS at
+ *                                        alpha=1. O(mem_len) per neuron per step.
+ *   SPIRES_SYNAPSE_FRACTIONAL_MULTIEXP:  params[0] = alpha (target order),
+ *                                        params[1] = tau_syn, params[2] =
+ *                                        tau_min, params[3] = tau_max,
+ *                                        params[4] = N (number of exponential
+ *                                        components). Cheaper O(N) per neuron
+ *                                        per step approximation of
+ *                                        SPIRES_SYNAPSE_FRACTIONAL's
+ *                                        Mittag-Leffler response, via the exact
+ *                                        Mittag-Leffler spectral density
+ *                                        discretized over N log-spaced
+ *                                        timescales in [tau_min, tau_max] --
+ *                                        expect it to track the exact model
+ *                                        well inside that window and diverge
+ *                                        outside it. */
 typedef enum {
     SPIRES_SYNAPSE_SIMPLE = 0,
     SPIRES_SYNAPSE_PSC_HOMOGENEOUS,
-    SPIRES_SYNAPSE_PSC_HETEROGENEOUS
+    SPIRES_SYNAPSE_PSC_HETEROGENEOUS,
+    SPIRES_SYNAPSE_FRACTIONAL,
+    SPIRES_SYNAPSE_FRACTIONAL_MULTIEXP
 } spires_synapse_type;
 
 /* Storage/compute backend, applies to all synapse types above. Explicit,

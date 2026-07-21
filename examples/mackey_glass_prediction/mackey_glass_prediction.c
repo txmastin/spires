@@ -113,7 +113,8 @@ int main(void)
         20.0,           // tau_m
         1.0,            // alpha
         (double)timesteps, // Tmem
-        0.1             // bias
+        0.1,            // bias
+        0.0             // t_ref
     };
     
     /* Base config (“ball-park” defaults) */

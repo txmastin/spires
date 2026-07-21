@@ -10,10 +10,12 @@ struct flif_gl_neuron {
     double tau_m;
     double alpha;
     double bias;
+    double t_ref;   // Absolute refractory period (same time units as dt/tau_m)
 
     // Neuron state variables
     double V;       // Current membrane potential
     double spike;   // Current spike state (0.0 or 1.0)
+    double t_prev;  // Time elapsed since last spike (see t_ref)
 
     // Internal state for self-contained simulation
     long internal_step; // Tracks the neuron's own "micro-steps"

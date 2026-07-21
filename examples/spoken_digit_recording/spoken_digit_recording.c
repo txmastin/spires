@@ -273,7 +273,8 @@ int main(void) {
         20.0,                   /* tau_m   */
         alpha,                  /* alpha   */
         10.0,                   /* Tmem    */
-        bias_from_alpha(alpha)  /* bias    */
+        bias_from_alpha(alpha), /* bias    */
+        0.0                     /* t_ref   */
     };
 
     spires_reservoir_config cfg = {

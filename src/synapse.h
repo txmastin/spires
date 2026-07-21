@@ -4,13 +4,17 @@
 #include "synapses/simple.h"
 #include "synapses/psc_homogeneous.h"
 #include "synapses/psc_heterogeneous.h"
+#include "synapses/fractional.h"
+#include "synapses/fractional_multiexp.h"
 
 /* Which synapse model. Future hot-swappable models (distributional,
  * biorealistic, memcapacitive, ...) are a separate, later effort. */
 enum synapse_type {
     SYNAPSE_SIMPLE = 0,
     SYNAPSE_PSC_HOMOGENEOUS,
-    SYNAPSE_PSC_HETEROGENEOUS
+    SYNAPSE_PSC_HETEROGENEOUS,
+    SYNAPSE_FRACTIONAL,
+    SYNAPSE_FRACTIONAL_MULTIEXP
 };
 
 /* Storage/compute backend. Explicit and user-selectable (see

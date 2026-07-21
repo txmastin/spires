@@ -26,6 +26,16 @@ struct synapse_matrix synapse_build_from_dense(const double *dense, size_t n,
             ? (void *)synapse_psc_heterogeneous_build_sparse(dense, n, synapse_params)
             : (void *)synapse_psc_heterogeneous_build_dense(dense, n, synapse_params);
         break;
+    case SYNAPSE_FRACTIONAL:
+        w.data = (backend == SYNAPSE_SPARSE)
+            ? (void *)synapse_fractional_build_sparse(dense, n, synapse_params)
+            : (void *)synapse_fractional_build_dense(dense, n, synapse_params);
+        break;
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        w.data = (backend == SYNAPSE_SPARSE)
+            ? (void *)synapse_fractional_multiexp_build_sparse(dense, n, synapse_params)
+            : (void *)synapse_fractional_multiexp_build_dense(dense, n, synapse_params);
+        break;
     }
 
     return w;
@@ -45,6 +55,12 @@ void synapse_free(struct synapse_matrix *w)
     case SYNAPSE_PSC_HETEROGENEOUS:
         synapse_psc_heterogeneous_free((struct psc_heterogeneous_synapse_data *)w->data);
         break;
+    case SYNAPSE_FRACTIONAL:
+        synapse_fractional_free((struct fractional_synapse_data *)w->data);
+        break;
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        synapse_fractional_multiexp_free((struct fractional_multiexp_synapse_data *)w->data);
+        break;
     }
     w->data = NULL;
     w->n = 0;
@@ -62,6 +78,12 @@ void synapse_to_dense(const struct synapse_matrix *w, double *dense_out)
     case SYNAPSE_PSC_HETEROGENEOUS:
         synapse_psc_heterogeneous_to_dense((const struct psc_heterogeneous_synapse_data *)w->data, dense_out);
         break;
+    case SYNAPSE_FRACTIONAL:
+        synapse_fractional_to_dense((const struct fractional_synapse_data *)w->data, dense_out);
+        break;
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        synapse_fractional_multiexp_to_dense((const struct fractional_multiexp_synapse_data *)w->data, dense_out);
+        break;
     }
 }
 
@@ -74,6 +96,10 @@ double synapse_row_dot(const struct synapse_matrix *w, size_t row, const double 
         return synapse_psc_homogeneous_row_dot((const struct psc_homogeneous_synapse_data *)w->data, row, x);
     case SYNAPSE_PSC_HETEROGENEOUS:
         return synapse_psc_heterogeneous_row_dot((const struct psc_heterogeneous_synapse_data *)w->data, row, x);
+    case SYNAPSE_FRACTIONAL:
+        return synapse_fractional_row_dot((const struct fractional_synapse_data *)w->data, row, x);
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        return synapse_fractional_multiexp_row_dot((const struct fractional_multiexp_synapse_data *)w->data, row, x);
     }
     return 0.0;
 }
@@ -90,6 +116,12 @@ void synapse_scale(struct synapse_matrix *w, double factor)
     case SYNAPSE_PSC_HETEROGENEOUS:
         synapse_psc_heterogeneous_scale((struct psc_heterogeneous_synapse_data *)w->data, factor);
         break;
+    case SYNAPSE_FRACTIONAL:
+        synapse_fractional_scale((struct fractional_synapse_data *)w->data, factor);
+        break;
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        synapse_fractional_multiexp_scale((struct fractional_multiexp_synapse_data *)w->data, factor);
+        break;
     }
 }
 
@@ -102,6 +134,10 @@ double synapse_spectral_radius(const struct synapse_matrix *w)
         return synapse_psc_homogeneous_spectral_radius((const struct psc_homogeneous_synapse_data *)w->data);
     case SYNAPSE_PSC_HETEROGENEOUS:
         return synapse_psc_heterogeneous_spectral_radius((const struct psc_heterogeneous_synapse_data *)w->data);
+    case SYNAPSE_FRACTIONAL:
+        return synapse_fractional_spectral_radius((const struct fractional_synapse_data *)w->data);
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        return synapse_fractional_multiexp_spectral_radius((const struct fractional_multiexp_synapse_data *)w->data);
     }
     return 0.0;
 }
@@ -115,6 +151,10 @@ const double *synapse_prepare(struct synapse_matrix *w, const double *spikes, do
         return synapse_psc_homogeneous_prepare((struct psc_homogeneous_synapse_data *)w->data, spikes, dt);
     case SYNAPSE_PSC_HETEROGENEOUS:
         return synapse_psc_heterogeneous_prepare((struct psc_heterogeneous_synapse_data *)w->data, spikes, dt);
+    case SYNAPSE_FRACTIONAL:
+        return synapse_fractional_prepare((struct fractional_synapse_data *)w->data, spikes, dt);
+    case SYNAPSE_FRACTIONAL_MULTIEXP:
+        return synapse_fractional_multiexp_prepare((struct fractional_multiexp_synapse_data *)w->data, spikes, dt);
     }
     return spikes;
 }

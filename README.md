@@ -57,12 +57,14 @@ The readout is trained to minimize the error between the target and predicted ou
 | Discrete LIF | `SPIRES_NEURON_LIF_DISCRETE` | `[V_0, V_th, leak_rate, bias]` |
 | Biophysical LIF | `SPIRES_NEURON_LIF_BIO` | `[V_0, V_th, tau, bias]` |
 | Fractional LIF (Caputo) | `SPIRES_NEURON_FLIF_CAPUTO` | `[C_m, g_l, V_l, V_th, V_reset, V_peak, alpha, t_ref, T_mem]` |
-| Fractional LIF (Grunwald-Letnikov) | `SPIRES_NEURON_FLIF_GL` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias]` |
+| Fractional LIF (Grunwald-Letnikov) | `SPIRES_NEURON_FLIF_GL` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias, t_ref]` |
 | Fractional LIF (Diffusive) | `SPIRES_NEURON_FLIF_DIFFUSIVE` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias]` |
 
 The fractional-order parameter `alpha` controls the order of the fractional derivative in the membrane potential dynamics. When `alpha = 1.0`, the neuron reduces to a standard LIF. Values `0 < alpha < 1` introduce long-range temporal memory through the Grünwald–Letnikov (or Caputo/diffusive) discretization of the fractional derivative [[2]](#references), enabling spike-frequency adaptation and richer temporal dynamics. The parameter α simultaneously governs memory capacity, active information storage, and information transfer — each peaking at distinct values of α — making it a continuous control parameter over the reservoir's information-processing regime.
 
 The `T_mem` parameter controls the memory horizon of the fractional derivative. The number of history samples retained is `L = T_mem / dt`. Larger values increase accuracy of the fractional approximation at the cost of computation and memory.
+
+`SPIRES_NEURON_FLIF_GL`'s `t_ref` sets an absolute refractory period (same time units as `dt`/`tau_m`): after firing, the neuron is held at `V_reset` (dynamics not integrated, no threshold check) until `t_ref` time units have elapsed. `t_ref = 0` disables refractoriness entirely. Non-zero `t_ref` blocks `round(t_ref / dt)` subsequent steps after each spike.
 
 ## Network Topologies
 

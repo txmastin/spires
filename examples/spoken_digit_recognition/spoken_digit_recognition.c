@@ -203,7 +203,8 @@ int main(void) {
                 20.0,   // params[3]: tau_m
                 alpha,    // params[4]: alpha
                 10.0,   // params[5]: Tmem
-                bias_from_alpha(alpha)     // params[6]: bias
+                bias_from_alpha(alpha),     // params[6]: bias
+                0.0     // params[7]: t_ref
             };
 
             double discrete_neuron_params[] = {
