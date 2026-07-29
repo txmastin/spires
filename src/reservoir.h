@@ -60,5 +60,7 @@ void reset_reservoir(struct reservoir *reservoir);
 struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weight_threshold);
 double *copy_reservoir_weights(const struct reservoir *r);
 void    read_reservoir_weights(const struct reservoir *r, double *buffer);
+double *copy_reservoir_readout(const struct reservoir *r);
+void    read_reservoir_readout(const struct reservoir *r, double *buffer);
 #endif // RESERVOIR_H
 
