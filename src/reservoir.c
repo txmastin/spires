@@ -989,8 +989,8 @@ double *copy_reservoir_readout(const struct reservoir *r)
 {
     if (!r)
         return NULL;
-    size_t n = r->num_outputs;
-    double *buf = malloc(n *  sizeof(double));
+    size_t n = r->num_outputs * r->num_neurons;
+    double *buf = malloc(n * sizeof(double));
     if (!buf)
         return NULL;
     memcpy(buf, r->W_out, n * sizeof(double));
@@ -1001,6 +1001,6 @@ void read_reservoir_readout(const struct reservoir *r, double *buffer)
 {
     if (!r || !buffer)
         return;
-    size_t n = r->num_outputs;
+    size_t n = r->num_outputs * r->num_neurons;
     memcpy(buffer, r->W_out, n * sizeof(double));
 }
