@@ -191,6 +191,21 @@ spires_status spires_read_weights(const spires_reservoir *r, double *buffer)
 {
     if (!r || !r->impl || !buffer)
         return SPIRES_ERR_INVALID_ARG;
+    read_reservoir_readout(r->impl, buffer);
+    return SPIRES_OK;
+}
+
+double *spires_copy_readout(const spires_reservoir *r)
+{
+    if (!r || !r->impl)
+        return NULL;
+    return copy_reservoir_readout(r->impl);
+}
+
+spires_status spires_read_readout(const spires_reservoir *r, double *buffer)
+{
+    if (!r || !r->impl || !buffer)
+        return SPIRES_ERR_INVALID_ARG;
     read_reservoir_weights(r->impl, buffer);
     return SPIRES_OK;
 }

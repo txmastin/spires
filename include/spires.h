@@ -209,6 +209,16 @@ spires_status spires_read_weights(const spires_reservoir *r, double *buffer);
  * Caller provides an array sized to num_outputs. */
 spires_status spires_compute_output(spires_reservoir *r, double *out);
 
+/* Returns a newly malloc'd copy of the readout layer W_out */
+
+double *spires_copy_readout(const spires_reservoir *r);
+
+/* Reads the readout layer W_out into a caller-provided buffer */
+
+spires_status spires_read_readout(const spires_reservoir *r, double *buffer);
+
+/* Compute current readout y = W_out * state (+ b). 
+ * Caller provides an array sized to num_outputs. */
 
 /* ----------------------------
  * Introspection

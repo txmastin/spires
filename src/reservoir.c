@@ -984,3 +984,23 @@ void read_reservoir_weights(const struct reservoir *r, double *buffer)
         return;
     synapse_to_dense(&r->W, buffer);
 }
+
+double *copy_reservoir_readout(const struct reservoir *r)
+{
+    if (!r)
+        return NULL;
+    size_t n = r->num_outputs;
+    double *buf = malloc(n *  sizeof(double));
+    if (!buf)
+        return NULL;
+    memcpy(buf, r->W_out, n * sizeof(double));
+    return buf;
+}
+
+void read_reservoir_readout(const struct reservoir *r, double *buffer)
+{
+    if (!r || !buffer)
+        return;
+    size_t n = r->num_outputs;
+    memcpy(buffer, r->W_out, n * sizeof(double));
+}
