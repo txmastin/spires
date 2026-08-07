@@ -74,7 +74,7 @@ void   update_flif_diffusive(struct flif_diffusive_neuron* n, double input, doub
 void   free_flif_diffusive(struct flif_diffusive_neuron* n);
 
 // Optional deterministic seeding for reproducibility
-void   flif_diffusive_set_seed(struct flif_diffusive_neuron* n, unsigned long long seed);
+void   flif_diffusive_set_seed(struct flif_diffusive_neuron* n, uint64_t seed);
 
 #ifdef __cplusplus
 }

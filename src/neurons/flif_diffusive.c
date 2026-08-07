@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <math.h>
 #include <string.h>
 
@@ -8,9 +9,9 @@
 
 // ---------------- RNG (SplitMix64) ----------------
 static inline uint64_t splitmix64_next(uint64_t *x) {
-    uint64_t z = (*x += 0x9E3779B97f4A7C15ULL);
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    uint64_t z = (*x += UINT64_C(0x9E3779B97f4A7C15));
+    z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+    z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
     return z ^ (z >> 31);
 }
 
@@ -116,11 +117,11 @@ struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt)
     }
 
     // Seed RNG deterministically from pointer + params (use 64-bit chunks of the doubles)
-    uint64_t seed = 0x9E3779B97f4A7C15ULL ^ (uintptr_t)n;
+    uint64_t seed = UINT64_C(0x9E3779B97f4A7C15) ^ (uintptr_t)n;
     for (int i=0;i<8;i++) {
         uint64_t bits = 0;
         memcpy(&bits, &params[i], sizeof(bits));
-        seed ^= bits + 0x9E3779B97f4A7C15ULL;
+        seed ^= bits + UINT64_C(0x9E3779B97f4A7C15);
         seed = splitmix64_next(&seed);
     }
     n->rng = seed;
@@ -128,10 +129,10 @@ struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt)
     return n;
 }
 
-void flif_diffusive_set_seed(struct flif_diffusive_neuron* n, unsigned long long seed)
+void flif_diffusive_set_seed(struct flif_diffusive_neuron* n, uint64_t seed)
 {
     if (!n) return;
-    if (seed == 0ULL) seed = 0xD1B54A32D192ED03ULL;
+    if (seed == UINT64_C(0)) seed = UINT64_C(0xD1B54A32D192ED03);
     n->rng = (uint64_t)seed;
     (void)splitmix64_next(&n->rng);
     (void)splitmix64_next(&n->rng);
