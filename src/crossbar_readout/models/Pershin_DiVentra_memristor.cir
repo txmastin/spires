@@ -1,0 +1,7 @@
+.subckt memristor pl mn PARAMS: Ron=1K Roff=10K Rinit=5K alpha=0 beta=1E13 Vt=4.6
+Bx 0 x I='(f1(V(pl,mn))>0) && (V(x)<Roff) ? {f1(V(pl,mn))}: (f1(V(pl,mn))<0) && (V(x)>Ron) ? {f1(V(pl,mn))}: {0}'
+Cx x 0 1 IC={Rinit}
+R0 pl mn 1E12
+Rmem pl mn r={V(x)}
+.func f1(y)={beta*y+0.5*(alpha-beta)*(abs(y+Vt)-abs(y-Vt))}
+.ends

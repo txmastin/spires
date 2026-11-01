@@ -149,7 +149,8 @@ SRCS := \
   $(SRC_DIR)/agile.c      \
   $(SRC_DIR)/spires_opt_agile.c \
   $(wildcard $(NEURON_DIR)/*.c) \
-  $(wildcard $(SYNAPSE_DIR)/*.c)
+  $(wildcard $(SYNAPSE_DIR)/*.c) \
+  $(PROFILE_SRCS)
 
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)

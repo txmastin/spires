@@ -1,0 +1,32 @@
+.subckt MEM_YAKOPCIC TE BE params:
++ Rinit=1000
++ a1=0.17 a2=0.17 b=0.05
++ Vp=0.65 Vn=0.56
++ Ap=4000 An=4000
++ xp=0.3 xn=0.5
++ alphap=1 alphan=5
++ eta=1
+
+.param xo={1/(a1*b*Rinit)}
+
+.func wp(x)={xp/(1-xp)-x/(1-xp)+1}
+.func wn(x)={x/(1-xn)}
+
+.func G(v)={ternary_fcn(v<=Vp,ternary_fcn(v>=-Vn,0,-An*(exp(-v)-exp(Vn))),Ap*(exp(v)-exp(Vp)))}
+
+.func F(v,x)={ternary_fcn(eta*v>=0,ternary_fcn(x>=xp,exp(-alphap*(x-xp))*wp(x),1),ternary_fcn(x<=(1-xn),exp(alphan*(x+xn-1))*wn(x),1))}
+
+.func IVRel(v,x)={ternary_fcn(v>=0,a1*x*sinh(b*v),a2*x*sinh(b*v))}
+
+Cx xsv 0 1 IC={xo}
+Rx xsv 0 1T
+
+Gx 0 xsv value={
++ eta*F(V(TE,BE),V(xsv))*G(V(TE,BE))
++ }
+
+Gm TE BE value={
++ IVRel(V(TE,BE),V(xsv))
++ }
+
+.ends MEM_YAKOPCIC

@@ -1,0 +1,8 @@
+* Fixed resistor memory-device baseline
+* Two-terminal, non-stateful element
+
+.subckt fixed_resistor plus minus PARAMS: Rinit=80k
+
+Rdevice plus minus {Rinit}
+
+.ends fixed_resistor

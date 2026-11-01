@@ -14,6 +14,9 @@
 #include "synapse.h"
 #include "spires_opt_agile.h"
 
+#ifdef SPIRES_ENABLE_CROSSBAR_READOUT
+#include "crossbar_readout/online_crossbar.h"
+#endif
 
 /* The public opaque handle wraps a backend pointer. */
 struct spires_reservoir {
@@ -143,6 +146,22 @@ double *spires_run(spires_reservoir *r, const double *input_series, size_t serie
     return run_reservoir(r->impl, (double *)input_series, series_length);
 }
 
+#ifdef SPIRES_ENABLE_CROSSBAR_READOUT
+spires_status spires_run_crossbar_readout_into(
+    const spires_crossbar_readout_config *config, spires_reservoir *reservoir,
+    const double *input_series, size_t series_length, double *buffer)
+{
+    return run_crossbar_readout_into(config, reservoir, input_series,
+                                     series_length, buffer);
+}
+
+double *spires_run_crossbar_readout(
+    const spires_crossbar_readout_config *config, spires_reservoir *reservoir,
+    const double *input_series, size_t series_length)
+{
+    return run_crossbar_readout(config, reservoir, input_series, series_length);
+}
+#endif
 
 spires_status spires_run_into(spires_reservoir *r, const double *input_series,
                               size_t series_length, double *output_buffer)
