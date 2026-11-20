@@ -63,19 +63,23 @@ void update_flif_gl(struct flif_gl_neuron* n, double input, double dt)
         int prev_idx = (head - 1 + n->mem_len) % n->mem_len;
         double V_prev = n->V_history[prev_idx];
 
-        // 1. Calculate the history term using the circular buffer.
+        // 1. Calculate the history term using the circular buffer. The
+        // scheme is applied to the deviation u = V - V_rest, so that rest is
+        // a fixed point: the GL derivative of a nonzero constant is not zero,
+        // and with a truncated window applying it to V itself makes a
+        // resting neuron drift whenever V_rest != 0.
         double history = 0.0;
         int limit = (n->internal_step < n->mem_len) ? n->internal_step : n->mem_len - 1;
         for (int k = 1; k <= limit; k++) {
             int idx = (head - k + n->mem_len) % n->mem_len;
-            history += n->coeffs[k] * n->V_history[idx];
+            history += n->coeffs[k] * (n->V_history[idx] - n->V_rest);
         }
 
         // 2. Calculate the "right-hand side" of the differential equation.
         double rhs = (-(V_prev - n->V_rest) / n->tau_m) + input + n->bias;
 
         // 3. The direct update rule, using the micro-step dt from the reservoir.
-        n->V = pow(dt, n->alpha) * rhs - history;
+        n->V = n->V_rest + pow(dt, n->alpha) * rhs - history;
 
         // 4. Spike-and-reset logic.
         if (n->V >= n->V_th) {

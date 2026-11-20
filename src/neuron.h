@@ -5,7 +5,7 @@
 #include "neurons/lif_bio.h"
 #include "neurons/flif_caputo.h"
 #include "neurons/flif_gl.h"
-#include "neurons/flif_diffusive.h"
+#include "neurons/lif_powerlaw_refractory.h"
 
 
 enum neuron_type {
@@ -13,7 +13,7 @@ enum neuron_type {
     LIF_BIO,
     FLIF_CAPUTO,
     FLIF_GL,
-    FLIF_DIFFUSIVE
+    LIF_POWERLAW_REFRACTORY
 };
 
 void* init_neuron(enum neuron_type type, double *neuron_params, double dt, void **shared_neuron_data);

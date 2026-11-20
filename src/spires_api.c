@@ -27,6 +27,26 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
     if (!cfg || !out_r)
         return SPIRES_ERR_INVALID_ARG;
 
+    if (cfg->num_neurons == 0 || cfg->num_inputs == 0 || cfg->num_outputs == 0) {
+        fprintf(stderr, "num_neurons, num_inputs and num_outputs must be non-zero\n");
+        return SPIRES_ERR_INVALID_ARG;
+    }
+    if ((unsigned)cfg->neuron_type > (unsigned)SPIRES_NEURON_LIF_POWERLAW_REFRACTORY) {
+        fprintf(stderr, "unknown neuron_type %d\n", (int)cfg->neuron_type);
+        return SPIRES_ERR_INVALID_ARG;
+    }
+    if ((unsigned)cfg->connectivity_type > (unsigned)SPIRES_CONN_SCALE_FREE) {
+        fprintf(stderr, "unknown connectivity_type %d\n", (int)cfg->connectivity_type);
+        return SPIRES_ERR_INVALID_ARG;
+    }
+    /* Every neuron model reads its parameters from this array; there are no
+     * built-in defaults, so NULL would be dereferenced during construction. */
+    if (!cfg->neuron_params) {
+        fprintf(stderr, "neuron_params must be set; see the layout for neuron_type %d\n",
+                (int)cfg->neuron_type);
+        return SPIRES_ERR_INVALID_ARG;
+    }
+
     /* Validate dt once, up front (strict: 1.0 must be an integer multiple of dt) */
     if (cfg->dt <= 0.0 || cfg->dt > 1.0) {
         fprintf(stderr, "dt must be in (0, 1.0]\n");
@@ -85,6 +105,8 @@ spires_status spires_reservoir_create(const spires_reservoir_config *cfg,
         .plasticity_type   = (enum plasticity_type)cfg->plasticity_type,
         .plasticity_params = cfg->plasticity_params,
         .seed              = cfg->seed,
+        .use_washout       = cfg->use_washout,
+        .washout           = cfg->washout,
     };
 
     struct reservoir *impl = create_reservoir(&params);
@@ -189,6 +211,11 @@ spires_status spires_train_ridge(spires_reservoir *r,
 {
     if (!r || !r->impl || !input_series || !target_series)
         return SPIRES_ERR_INVALID_ARG;
+    if (r->impl->use_washout && r->impl->washout >= series_length) {
+        fprintf(stderr, "washout (%zu) leaves no states to train on (series_length %zu)\n",
+                r->impl->washout, series_length);
+        return SPIRES_ERR_INVALID_ARG;
+    }
     train_output_ridge_regression(r->impl,
                                   (double *)input_series,
                                   (double *)target_series,
@@ -204,6 +231,11 @@ spires_status spires_train_rls(spires_reservoir *r,
 {
     if (!r || !r->impl || !input_series || !target_series)
         return SPIRES_ERR_INVALID_ARG;
+    if (r->impl->use_washout && r->impl->washout >= series_length) {
+        fprintf(stderr, "washout (%zu) leaves no states to train on (series_length %zu)\n",
+                r->impl->washout, series_length);
+        return SPIRES_ERR_INVALID_ARG;
+    }
     train_output_rls(r->impl,
                      (double *)input_series,
                      (double *)target_series,

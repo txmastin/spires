@@ -222,7 +222,7 @@ int main(void) {
                 case SPIRES_NEURON_FLIF_GL:
                     neuron_params = fractional_neuron_params;
                     break;
-                case SPIRES_NEURON_FLIF_DIFFUSIVE:
+                case SPIRES_NEURON_LIF_POWERLAW_REFRACTORY:
                     neuron_params = fractional_neuron_params;
                     break;
                 default:

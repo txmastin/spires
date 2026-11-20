@@ -47,6 +47,9 @@ struct reservoir {
     struct plasticity_state plasticity;   /* traces owned here */
     uint64_t seed;              // seed this reservoir was built from
     struct spires_rng rng;      // per-reservoir stream; replaces global rand()
+    int use_washout;
+    size_t washout;             // states after reset excluded from training
+    size_t steps_since_reset;   // macro steps since construction or reset
 };
 
 /* Construction parameters. Grouped so that adding one does not lengthen a
@@ -75,6 +78,8 @@ struct reservoir_params {
      * sentinel: construction is reproducible by default. Callers wanting a
      * different network per run pass spires_random_seed(). */
     uint64_t seed;
+    int use_washout;
+    size_t washout;
 };
 
 struct reservoir* create_reservoir(const struct reservoir_params *p);

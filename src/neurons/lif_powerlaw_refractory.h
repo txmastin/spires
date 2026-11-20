@@ -1,11 +1,17 @@
-#ifndef FLIF_DIFFUSIVE_H
-#define FLIF_DIFFUSIVE_H
+#ifndef LIF_POWERLAW_REFRACTORY_H
+#define LIF_POWERLAW_REFRACTORY_H
 
-// flif_diffusive (double-precision): power-law refractory neuron (no fractional derivative).
+// lif_powerlaw_refractory (double-precision): Euler LIF whose refractory
+// period after each spike is drawn at random. This is not a fractional-order
+// model: the subthreshold dynamics are integer order and memoryless.
 // Alpha ∈ [0,1] controls the refractory law:
 //   α = 1 → deterministic refractory t_ref (standard LIF with absolute refractory)
 //   α = 0 → uniform refractory on [t_min, t_max]
 //   0<α<1 → mixture: point mass at t_ref with weight m(α)=α^γ and truncated power-law tail with slope q(α)=QMAX·α
+//
+// Randomness comes from a per-neuron SplitMix64 stream that the reservoir
+// seeds from its own seed and the neuron's index, so a run is reproducible
+// from its configuration.
 //
 // Params layout:
 //   params[0] = V_th
@@ -19,17 +25,17 @@
 //   params[6] = bias
 //
 // Compile-time knobs (override with -D flags as needed):
-#ifndef FLIF_DIFF_TMIN_MULT
-#define FLIF_DIFF_TMIN_MULT 1.0    // t_min = MULT * dt
+#ifndef LIF_PLR_TMIN_MULT
+#define LIF_PLR_TMIN_MULT 1.0    // t_min = MULT * dt
 #endif
-#ifndef FLIF_DIFF_TMAX_MULT
-#define FLIF_DIFF_TMAX_MULT 100.0  // fallback t_max when params[6] <= 0 in α<1 mode
+#ifndef LIF_PLR_TMAX_MULT
+#define LIF_PLR_TMAX_MULT 100.0  // fallback t_max when params[5] <= 0 in α<1 mode
 #endif
-#ifndef FLIF_DIFF_GAMMA
-#define FLIF_DIFF_GAMMA 2.0        // collapse weight m(α) = α^γ
+#ifndef LIF_PLR_GAMMA
+#define LIF_PLR_GAMMA 2.0        // collapse weight m(α) = α^γ
 #endif
-#ifndef FLIF_DIFF_QMAX
-#define FLIF_DIFF_QMAX 6.0         // power-law slope q(α) = QMAX * α  (q=0 → uniform)
+#ifndef LIF_PLR_QMAX
+#define LIF_PLR_QMAX 6.0         // power-law slope q(α) = QMAX * α  (q=0 → uniform)
 #endif
 
 #ifndef MAX_MEM_LEN
@@ -43,7 +49,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-struct flif_diffusive_neuron {
+struct lif_powerlaw_refractory_neuron {
     // Parameters (double precision)
     double V_th, V_reset, V_rest, tau_m, alpha, bias;
 
@@ -57,7 +63,7 @@ struct flif_diffusive_neuron {
 
     // Refractory gate
     long   refractory_until;  // step index (exclusive) until which spikes are suppressed
-    double t_min;             // lower truncation (≈ dt * FLIF_DIFF_TMIN_MULT) in seconds
+    double t_min;             // lower truncation (≈ dt * LIF_PLR_TMIN_MULT) in seconds
     double t_max;             // upper truncation (α<1 mode) in seconds
     double t_ref;             // deterministic refractory (α≥1 mode) in seconds
 
@@ -69,15 +75,16 @@ struct flif_diffusive_neuron {
 };
 
 // API (double throughout)
-struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt);
-void   update_flif_diffusive(struct flif_diffusive_neuron* n, double input, double dt);
-void   free_flif_diffusive(struct flif_diffusive_neuron* n);
+struct lif_powerlaw_refractory_neuron* init_lif_powerlaw_refractory(double* params, double dt);
+void   update_lif_powerlaw_refractory(struct lif_powerlaw_refractory_neuron* n, double input, double dt);
+void   free_lif_powerlaw_refractory(struct lif_powerlaw_refractory_neuron* n);
 
-// Optional deterministic seeding for reproducibility
-void   flif_diffusive_set_seed(struct flif_diffusive_neuron* n, unsigned long long seed);
+// Deterministic seeding; the reservoir calls this for every neuron at
+// construction and on reset.
+void   lif_powerlaw_refractory_set_seed(struct lif_powerlaw_refractory_neuron* n, unsigned long long seed);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // FLIF_DIFFUSIVE_H
+#endif // LIF_POWERLAW_REFRACTORY_H

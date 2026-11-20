@@ -2,9 +2,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
-#include <string.h>
 
-#include "flif_diffusive.h"
+#include "lif_powerlaw_refractory.h"
 
 // ---------------- RNG (SplitMix64) ----------------
 static inline uint64_t splitmix64_next(uint64_t *x) {
@@ -37,8 +36,8 @@ static inline double sample_trunc_power(double tmin, double tmax, double q, doub
 
 // Alpha-controlled refractory sampler (single knob).
 // alpha in [0,1]:
-//   m(alpha) = alpha^FLIF_DIFF_GAMMA  → probability of deterministic refractory t_ref (delta mass)
-//   q(alpha) = FLIF_DIFF_QMAX * alpha → tail slope for truncated power on [tmin,tmax]
+//   m(alpha) = alpha^LIF_PLR_GAMMA  → probability of deterministic refractory t_ref (delta mass)
+//   q(alpha) = LIF_PLR_QMAX * alpha → tail slope for truncated power on [tmin,tmax]
 static inline double sample_alpha_refractory(double tmin, double tmax,
                                              double alpha, double t_ref,
                                              uint64_t *rng)
@@ -46,8 +45,8 @@ static inline double sample_alpha_refractory(double tmin, double tmax,
     if (alpha < 0.0) alpha = 0.0;
     if (alpha > 1.0) alpha = 1.0;
 
-    const double m = pow(alpha, (double)FLIF_DIFF_GAMMA);
-    const double q = (double)FLIF_DIFF_QMAX * alpha;
+    const double m = pow(alpha, (double)LIF_PLR_GAMMA);
+    const double q = (double)LIF_PLR_QMAX * alpha;
 
     double u0 = u01(rng);
     if (u0 < m) return t_ref; // collapse to deterministic refractory as alpha→1
@@ -65,10 +64,10 @@ static inline long steps_from_time(double W, double dt){
 // ---------------- Public API ----------------
 
 // params: [V_th, V_reset, V_rest, tau_m, alpha, dt, T_mem_or_tref, bias]
-struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt)
+struct lif_powerlaw_refractory_neuron* init_lif_powerlaw_refractory(double* params, double dt)
 {
     if (!params) return NULL;
-    struct flif_diffusive_neuron* n = (struct flif_diffusive_neuron*)malloc(sizeof *n);
+    struct lif_powerlaw_refractory_neuron* n = (struct lif_powerlaw_refractory_neuron*)malloc(sizeof *n);
     if (!n) return NULL;
 
     n->V_th   = params[0];
@@ -95,8 +94,8 @@ struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt)
 
     if (n->alpha < 1.0) {
         // Heavy-tailed refractory mode
-        n->t_min = (double)FLIF_DIFF_TMIN_MULT * dt;
-        n->t_max = (P6 > 0.0) ? P6 : (double)FLIF_DIFF_TMAX_MULT * n->tau_m;
+        n->t_min = (double)LIF_PLR_TMIN_MULT * dt;
+        n->t_max = (P6 > 0.0) ? P6 : (double)LIF_PLR_TMAX_MULT * n->tau_m;
         if (n->t_max <= n->t_min) n->t_max = n->t_min * 2.0;
         n->t_ref = dt; // default point for mixture branch
 
@@ -108,27 +107,21 @@ struct flif_diffusive_neuron* init_flif_diffusive(double* params, double dt)
     } else {
         // Deterministic refractory (standard LIF with optional absolute refractory)
         n->t_ref = (P6 > 0.0) ? P6 : 0.0; // 0 → no absolute refractory
-        n->t_min = (double)FLIF_DIFF_TMIN_MULT * dt; // defined for completeness
+        n->t_min = (double)LIF_PLR_TMIN_MULT * dt; // defined for completeness
         n->t_max = n->t_ref;
         n->mem_len = (int)((n->t_ref > 0.0) ? (n->t_ref / dt) : 2);
         if (n->mem_len < 2) n->mem_len = 2;
         if (n->mem_len > MAX_MEM_LEN) n->mem_len = MAX_MEM_LEN;
     }
 
-    // Seed RNG deterministically from pointer + params (use 64-bit chunks of the doubles)
-    uint64_t seed = 0x9E3779B97f4A7C15ULL ^ (uintptr_t)n;
-    for (int i=0;i<8;i++) {
-        uint64_t bits = 0;
-        memcpy(&bits, &params[i], sizeof(bits));
-        seed ^= bits + 0x9E3779B97f4A7C15ULL;
-        seed = splitmix64_next(&seed);
-    }
-    n->rng = seed;
+    // Fixed default; the reservoir reseeds every neuron from its own seed
+    // and the neuron's index, so runs are reproducible from the config.
+    lif_powerlaw_refractory_set_seed(n, 0ULL);
 
     return n;
 }
 
-void flif_diffusive_set_seed(struct flif_diffusive_neuron* n, unsigned long long seed)
+void lif_powerlaw_refractory_set_seed(struct lif_powerlaw_refractory_neuron* n, unsigned long long seed)
 {
     if (!n) return;
     if (seed == 0ULL) seed = 0xD1B54A32D192ED03ULL;
@@ -137,7 +130,7 @@ void flif_diffusive_set_seed(struct flif_diffusive_neuron* n, unsigned long long
     (void)splitmix64_next(&n->rng);
 }
 
-void update_flif_diffusive(struct flif_diffusive_neuron* n, double input, double dt)
+void update_lif_powerlaw_refractory(struct lif_powerlaw_refractory_neuron* n, double input, double dt)
 {
     if (!n) return;
 
@@ -174,7 +167,7 @@ void update_flif_diffusive(struct flif_diffusive_neuron* n, double input, double
     n->internal_step++;
 }
 
-void free_flif_diffusive(struct flif_diffusive_neuron* n)
+void free_lif_powerlaw_refractory(struct lif_powerlaw_refractory_neuron* n)
 {
     if (!n) return;
     free(n);

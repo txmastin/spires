@@ -47,7 +47,7 @@ typedef enum {
     SPIRES_NEURON_LIF_BIO,
     SPIRES_NEURON_FLIF_CAPUTO,
     SPIRES_NEURON_FLIF_GL,
-    SPIRES_NEURON_FLIF_DIFFUSIVE
+    SPIRES_NEURON_LIF_POWERLAW_REFRACTORY  /* integer order; random power-law refractory period */
 } spires_neuron_type;
 
 /* Which synapse model governs the recurrent connections. Distinct from
@@ -160,6 +160,14 @@ typedef struct {
      * a reproducible network rather than a different one each run. Pass
      * spires_random_seed() to opt in to per-run variation. */
     uint64_t seed;
+    /* Washout. When use_washout is non-zero, the first `washout` reservoir
+     * states after each reset are excluded from training, so the readout is
+     * not fitted to the start-up transient: spires_train_ridge drops them
+     * from the fit, spires_train_rls steps through them without updating,
+     * and spires_train_online makes no update until `washout` steps have
+     * passed since the last reset. Zero-initialised, it is off. */
+    int    use_washout;
+    size_t washout;                /* in steps (input samples) */
 } spires_reservoir_config;
 
 /* Nondeterministic seed for spires_reservoir_config.seed. Use only when a

@@ -6,7 +6,7 @@ Spires provides configurable spiking neural network reservoirs with multiple neu
 
 ## Features
 
-- **5 neuron models**: discrete LIF, biophysical LIF, and three fractional-order variants (Caputo, Grunwald-Letnikov, diffusive)
+- **5 neuron models**: discrete LIF, biophysical LIF, LIF with a power-law refractory period, and two fractional-order variants (Caputo, Grunwald-Letnikov)
 - **3 network topologies**: Erdos-Renyi random, Watts-Strogatz small-world, Barabasi-Albert scale-free
 - **Readout training**: ridge regression (batch) and online delta rule
 - **Coarse-graining**: renormalization-group-inspired reservoir compression that preserves critical dynamics
@@ -58,11 +58,13 @@ The readout is trained to minimize the error between the target and predicted ou
 | Biophysical LIF | `SPIRES_NEURON_LIF_BIO` | `[V_0, V_th, tau, bias]` |
 | Fractional LIF (Caputo) | `SPIRES_NEURON_FLIF_CAPUTO` | `[C_m, g_l, V_l, V_th, V_reset, V_peak, alpha, t_ref, T_mem]` |
 | Fractional LIF (Grunwald-Letnikov) | `SPIRES_NEURON_FLIF_GL` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias, t_ref]` |
-| Fractional LIF (Diffusive) | `SPIRES_NEURON_FLIF_DIFFUSIVE` | `[V_th, V_reset, V_rest, tau_m, alpha, T_mem, bias]` |
+| LIF, power-law refractory | `SPIRES_NEURON_LIF_POWERLAW_REFRACTORY` | `[V_th, V_reset, V_rest, tau_m, alpha, t_max_or_t_ref, bias]` |
 
-The fractional-order parameter `alpha` controls the order of the fractional derivative in the membrane potential dynamics. When `alpha = 1.0`, the neuron reduces to a standard LIF. Values `0 < alpha < 1` introduce long-range temporal memory through the Grünwald–Letnikov (or Caputo/diffusive) discretization of the fractional derivative [[2]](#references), enabling spike-frequency adaptation and richer temporal dynamics. The parameter α simultaneously governs memory capacity, active information storage, and information transfer — each peaking at distinct values of α — making it a continuous control parameter over the reservoir's information-processing regime.
+The fractional-order parameter `alpha` controls the order of the fractional derivative in the membrane potential dynamics. When `alpha = 1.0`, the neuron reduces to a standard LIF. Values `0 < alpha < 1` introduce long-range temporal memory through the Grünwald–Letnikov (or Caputo) discretization of the fractional derivative [[2]](#references), enabling spike-frequency adaptation and richer temporal dynamics. The parameter α simultaneously governs memory capacity, active information storage, and information transfer — each peaking at distinct values of α — making it a continuous control parameter over the reservoir's information-processing regime.
 
 The `T_mem` parameter controls the memory horizon of the fractional derivative. The number of history samples retained is `L = T_mem / dt`. Larger values increase accuracy of the fractional approximation at the cost of computation and memory.
+
+`SPIRES_NEURON_LIF_POWERLAW_REFRACTORY` is not fractional order: its subthreshold dynamics are an ordinary Euler LIF. Its `alpha` instead shapes the random refractory period drawn after each spike, from a fixed `t_ref` at `alpha = 1` to a truncated power law on `[dt, t_max]` as `alpha` decreases. Draws come from a per-neuron stream seeded from the reservoir's `seed`, so runs are reproducible.
 
 `SPIRES_NEURON_FLIF_GL`'s `t_ref` sets an absolute refractory period (same time units as `dt`/`tau_m`): after firing, the neuron is held at `V_reset` (dynamics not integrated, no threshold check) until `t_ref` time units have elapsed. `t_ref = 0` disables refractoriness entirely. Non-zero `t_ref` blocks `round(t_ref / dt)` subsequent steps after each spike.
 
@@ -106,6 +108,26 @@ $$W\_{out} \leftarrow W\_{out} + \mu \cdot \epsilon(t) \cdot \mathbf{v}(t)^\inte
 
 where $\mu$ is the learning rate and $\epsilon(t) = y\_{target}(t) - y(t)$ is the prediction error. Unlike RLS, it requires no auxiliary matrices — memory overhead is $O(N)$ and per-step compute is $O(N \cdot D\_{out})$ regardless of reservoir size. Convergence is slower than RLS, but the minimal footprint makes it well suited to embedded or resource-constrained deployments where memory is more limiting than training efficiency. Use `spires_train_online()`.
 
+### Washout
+
+A reservoir started from rest takes some steps to settle, and its early states reflect that start-up rather than the input. Fitting the readout to them biases it toward the transient. Setting `use_washout = 1` and `washout = W` in the configuration excludes the first $W$ states after each reset from training, for every method:
+
+- `spires_train_ridge()` harvests the whole series but fits only on states $W$ onward, i.e. $\Phi$ and $Y$ above start at row $W$.
+- `spires_train_rls()` steps the reservoir through the first $W$ samples without updating $W\_{out}$ or $P$.
+- `spires_train_online()` makes no update until $W$ steps have passed since the last reset (or since construction).
+
+Both batch methods reset the reservoir before harvesting, and return `SPIRES_ERR_INVALID_ARG` if $W$ is not shorter than the training series. With `use_washout = 0`, the default for a zero-initialized configuration, every state is used. Choose $W$ to cover a few membrane time constants plus the memory the task needs.
+
+```c
+spires_reservoir_config cfg = {
+    /* ... */
+    .use_washout = 1,
+    .washout     = 200,   /* steps */
+};
+```
+
+Inference with `spires_run()` is unaffected; if you reset before inference, discard the first $W$ predictions when scoring.
+
 ## Coarse-Graining
 
 Spires implements the coarse-graining (renormalization) algorithm from [[1]](#references). The algorithm iteratively merges pairs of neurons connected by strong positive weights — neurons that share a high synaptic weight perform redundant computation and can be treated as a single unit.
@@ -132,7 +154,7 @@ Spires includes a built-in optimizer based on **AGILE** (Adaptive Gradient-Infor
 
 The optimizer tunes reservoir size, spectral radius, input gain, connectivity, excitatory/inhibitory ratio, network topology, fractional order, and ridge regularization simultaneously. It supports multi-fidelity evaluation budgets — running quick, low-seed evaluations early and more expensive, multi-seed evaluations to confirm promising candidates.
 
-Use `spires_optimize()` to run the optimizer. See `examples/mackey_glass_prediction/` for a complete example.
+Use `spires_optimize()` to run the optimizer.
 
 ## Quick Start
 
@@ -151,7 +173,8 @@ int main(void)
         20.0,   /* tau_m   — membrane time const  */
         0.7,    /* alpha   — fractional order     */
         100.0,  /* T_mem   — memory horizon       */
-        0.1     /* bias    — constant input bias  */
+        0.1,    /* bias    — constant input bias  */
+        0.0     /* t_ref   — refractory period    */
     };
 
     spires_reservoir_config cfg = {
@@ -195,7 +218,7 @@ int main(void)
 
 The `examples/` directory contains two complete applications:
 
-- **`mackey_glass_prediction/`** — chaotic time series prediction with automatic hyperparameter optimization
+- **`mackey_glass_prediction/`** — one-step-ahead prediction of the chaotic Mackey-Glass series, with a washout and a held-out test segment scored by NRMSE
 - **`spoken_digit_recognition/`** — FSDD spoken digit classification using fractional-order neurons
 
 ## Building
@@ -223,12 +246,14 @@ emerge sci-libs/openblas sci-libs/lapack
 make
 ```
 
-This produces `lib/libspires.a`. To use spires in your project, link against the static library:
+This produces `lib/libspires.a`, built with clang by default. To use spires in your project, link against the static library with the **same compiler family** that built it:
 
 ```sh
-cc -O2 -I/path/to/spires/include my_program.c \
+clang -O2 -I/path/to/spires/include my_program.c \
     -L/path/to/spires/lib -lspires -lopenblas -llapacke -lm -fopenmp
 ```
+
+Clang and GCC use different OpenMP runtimes, so linking a clang-built library with gcc fails with `undefined reference to '__kmpc_fork_call'`. To use gcc throughout, build with `make clean && make CC=gcc`.
 
 ## API Reference
 
@@ -263,9 +288,20 @@ typedef struct {
     double dt;                             /* integration timestep; 1/dt must be integer */
     spires_connectivity_type connectivity_type;
     spires_neuron_type       neuron_type;
-    double *neuron_params;                 /* neuron-specific parameters (caller-owned) */
+    double *neuron_params;                 /* neuron-specific parameters (caller-owned, required) */
+    spires_synapse_type      synapse_type;    /* default 0 = SPIRES_SYNAPSE_SIMPLE */
+    spires_synapse_backend   synapse_backend; /* default 0 = SPIRES_SYNAPSE_SPARSE */
+    spires_ei_mode           ei_mode;         /* default 0 = SPIRES_EI_PER_SYNAPSE */
+    spires_plasticity_type   plasticity_type; /* default 0 = SPIRES_PLASTICITY_NONE */
+    double *plasticity_params;             /* caller-owned */
+    double *synapse_params;                /* caller-owned */
+    uint64_t seed;                         /* per-reservoir RNG seed; 0 is an ordinary seed */
+    int    use_washout;                    /* exclude the start-up transient from training */
+    size_t washout;                        /* washout length in steps */
 } spires_reservoir_config;
 ```
+
+The parameter arrays are not copied: the reservoir keeps the pointers and re-reads `neuron_params` on reset, so they must outlive it. See [Washout](#washout) for `use_washout` and `washout`.
 
 ### Lifecycle
 

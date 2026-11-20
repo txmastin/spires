@@ -52,8 +52,8 @@ void *init_neuron(enum neuron_type type, double *neuron_params, double dt, void 
             }
             neuron = (struct flif_gl_neuron *)init_flif_gl(neuron_params, dt, *shared_neuron_data);
             break;
-        case FLIF_DIFFUSIVE:
-            neuron = (struct flif_diffusive_neuron *)init_flif_diffusive(neuron_params, dt);
+        case LIF_POWERLAW_REFRACTORY:
+            neuron = (struct lif_powerlaw_refractory_neuron *)init_lif_powerlaw_refractory(neuron_params, dt);
             break;
         default:
             _handle_unknown_neuron_type(__func__);
@@ -77,8 +77,8 @@ void update_neuron(void *neuron, enum neuron_type type, double input, double dt)
         case FLIF_GL:
             update_flif_gl((struct flif_gl_neuron *)neuron, input, dt);
             break;
-        case FLIF_DIFFUSIVE:
-            update_flif_diffusive((struct flif_diffusive_neuron *)neuron, input, dt);
+        case LIF_POWERLAW_REFRACTORY:
+            update_lif_powerlaw_refractory((struct lif_powerlaw_refractory_neuron *)neuron, input, dt);
             break;
         default:
             _handle_unknown_neuron_type(__func__);
@@ -101,8 +101,8 @@ double get_neuron_state(void *neuron, enum neuron_type type)
         case FLIF_GL:
             val = ((struct flif_gl_neuron *)neuron)->V;
             break;
-        case FLIF_DIFFUSIVE:
-            val = ((struct flif_diffusive_neuron *)neuron)->V;
+        case LIF_POWERLAW_REFRACTORY:
+            val = ((struct lif_powerlaw_refractory_neuron *)neuron)->V;
             break;
         default:
             _handle_unknown_neuron_type(__func__);
@@ -125,8 +125,8 @@ void set_neuron_state(void *neuron, enum neuron_type type, double V)
         case FLIF_GL:
             ((struct flif_gl_neuron *)neuron)->V = V;
             break;
-        case FLIF_DIFFUSIVE:
-            ((struct flif_diffusive_neuron *)neuron)->V = V;
+        case LIF_POWERLAW_REFRACTORY:
+            ((struct lif_powerlaw_refractory_neuron *)neuron)->V = V;
             break;
         default:
             _handle_unknown_neuron_type(__func__);
@@ -149,8 +149,8 @@ double get_neuron_spike(void *neuron, enum neuron_type type)
         case FLIF_GL:
             spike = ((struct flif_gl_neuron *)neuron)->spike;
             break;
-        case FLIF_DIFFUSIVE:
-            spike = ((struct flif_diffusive_neuron *)neuron)->spike;
+        case LIF_POWERLAW_REFRACTORY:
+            spike = ((struct lif_powerlaw_refractory_neuron *)neuron)->spike;
             break;
         default:
             _handle_unknown_neuron_type(__func__);
@@ -174,8 +174,8 @@ void free_neuron(void *neuron, enum neuron_type type)
         case FLIF_GL:
             free_flif_gl((struct flif_gl_neuron *)neuron);
             break;
-        case FLIF_DIFFUSIVE:
-            free_flif_diffusive((struct flif_diffusive_neuron *)neuron);
+        case LIF_POWERLAW_REFRACTORY:
+            free_lif_powerlaw_refractory((struct lif_powerlaw_refractory_neuron *)neuron);
             break;
     }
     neuron = NULL;

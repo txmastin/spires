@@ -13,6 +13,18 @@
 
 
 
+/* Neurons that draw random numbers get a seed derived from the reservoir
+ * seed and their index, not a draw from reservoir->rng, so the weight
+ * stream is the same whatever the neuron type. */
+static void seed_neurons(struct reservoir *r)
+{
+    if (r->neuron_type != LIF_POWERLAW_REFRACTORY) return;
+    for (size_t i = 0; i < r->num_neurons; i++) {
+        uint64_t s = r->seed + 0x9E3779B97F4A7C15ULL * (uint64_t)(i + 1);
+        lif_powerlaw_refractory_set_seed(r->neurons[i], s);
+    }
+}
+
 /* **** create reservoir ***** */
 
 struct reservoir *create_reservoir(const struct reservoir_params *p)
@@ -69,6 +81,9 @@ struct reservoir *create_reservoir(const struct reservoir_params *p)
         }
     }
     reservoir->seed = p->seed;
+    reservoir->use_washout = p->use_washout;
+    reservoir->washout = p->washout;
+    reservoir->steps_since_reset = 0;
     spires_rng_seed(&reservoir->rng, p->seed);
 
 
@@ -88,6 +103,7 @@ struct reservoir *create_reservoir(const struct reservoir_params *p)
     }
     
     reservoir->shared_neuron_data = local_shared_neuron_data; // malloc'd in function if flif_gl is used, must free
+    seed_neurons(reservoir);
 
     return reservoir;
 }
@@ -215,8 +231,16 @@ void step_reservoir(struct reservoir *r, const double *input_vector)
         synapse_apply_plasticity(&r->W, new_spikes, &r->plasticity, r->dt);
         plasticity_accumulate(&r->plasticity, new_spikes, num_neurons);
 
-        memcpy(last_spikes, new_spikes, num_neurons * sizeof(double)); 
+        memcpy(last_spikes, new_spikes, num_neurons * sizeof(double));
     }
+    r->steps_since_reset++;
+}
+
+/* Whether the state after the current step falls inside the washout. Steps
+ * are counted from 1, so with washout W the first W states are excluded. */
+static int in_washout(const struct reservoir *r)
+{
+    return r->use_washout && r->steps_since_reset <= r->washout;
 }
 
 
@@ -302,6 +326,8 @@ void train_output_iteratively(struct reservoir *r, double *target_vector, double
         fprintf(stderr, "Error: Reservoir or target vector is NULL.\n");
         return;
     }
+    if (in_washout(r))
+        return;
 
     size_t num_neurons = r->num_neurons;
     size_t num_outputs = r->num_outputs;
@@ -713,8 +739,19 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     // --- Step 2: Construct the matrices for the normal equation A*W = B ---
     // A = X'X + lambda*I  (size: num_neurons x num_neurons)
     // B = X'Y             (size: num_neurons x 1)
+    //
+    // Under washout the first `washout` states, the start-up transient, are
+    // harvested but left out of the fit: X and Y are taken from row `skip`.
+    size_t skip = reservoir->use_washout ? reservoir->washout : 0;
+    if (skip >= series_length) {
+        fprintf(stderr, "Error training. Washout leaves no states to fit.\n");
+        free(X);
+        return;
+    }
+    double *X_fit = X + skip * num_neurons;
+    size_t n_fit = series_length - skip;
 
-    double *X_T = malloc(num_neurons * series_length * sizeof(double));
+    double *X_T = malloc(num_neurons * n_fit * sizeof(double));
     double *A = malloc(num_neurons * num_neurons * sizeof(double));
     double *B = malloc(num_neurons * sizeof(double));
     if (!X_T || !A || !B) {
@@ -724,10 +761,10 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
     }
 
     // Calculate X_T (transpose of X)
-    mat_transpose(X, X_T, series_length, num_neurons);
+    mat_transpose(X_fit, X_T, n_fit, num_neurons);
 
     // Calculate A = X_T * X
-    mat_mat_mult(X_T, X, A, num_neurons, series_length, num_neurons);
+    mat_mat_mult(X_T, X_fit, A, num_neurons, n_fit, num_neurons);
 
     // Add the ridge term: A = A + lambda * I
     for (size_t i = 0; i < num_neurons; i++) {
@@ -753,19 +790,19 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
         }
         
         // First, extract the i-th column from the target_series matrix into Y_i
-        double *Y_i = malloc(series_length * sizeof(double));
-        if (!Y_i) { 
-            free(A_copy); 
+        double *Y_i = malloc(n_fit * sizeof(double));
+        if (!Y_i) {
+            free(A_copy);
             free(b);
-            continue; 
+            continue;
         }
-        for(size_t t = 0; t < series_length; t++) {
-            Y_i[t] = target_series[t * num_outputs + i];
+        for(size_t t = 0; t < n_fit; t++) {
+            Y_i[t] = target_series[(t + skip) * num_outputs + i];
         }
-        
+
         // Then, compute b = X_T * Y_i
         cblas_dgemv(CblasRowMajor, CblasNoTrans,
-                    num_neurons, series_length, 1.0, X_T, series_length,
+                    num_neurons, n_fit, 1.0, X_T, n_fit,
                     Y_i, 1, 0.0, b, 1);
 
         // Solve A*w = b for w, where w is the i-th row of W_out
@@ -835,6 +872,8 @@ void train_output_rls(struct reservoir *reservoir, double *input_series,
         const double *current_target = &target_series[t * num_outputs];
 
         step_reservoir(reservoir, current_input);
+        if (in_washout(reservoir))
+            continue;   // start-up transient: step, but do not update
         read_reservoir_state(reservoir, state);
 
         // Px = P * x
@@ -889,6 +928,8 @@ void reset_reservoir(struct reservoir *reservoir)
         free_neuron(reservoir->neurons[i], reservoir->neuron_type);
         reservoir->neurons[i] = init_neuron(reservoir->neuron_type, reservoir->neuron_params, reservoir->dt, &local_ptr);
     }
+    seed_neurons(reservoir);
+    reservoir->steps_since_reset = 0;
 }
 
 struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weight_threshold)
@@ -1071,6 +1112,8 @@ struct reservoir *coarse_grain_reservoir(const struct reservoir *r, double weigh
         .ei_mode           = EI_PER_SYNAPSE,
         .plasticity_type   = PLASTICITY_NONE,
         .seed              = r->seed,
+        .use_washout       = r->use_washout,
+        .washout           = r->washout,
     };
     struct reservoir *new_r = create_reservoir(&cg_params);
     if (!new_r) {
