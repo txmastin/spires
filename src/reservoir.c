@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <time.h>
 #include <cblas.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <string.h> // for memcpy
 #include <math.h>
 
@@ -776,7 +778,11 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
         // Each thread allocates its own copy of A on the heap to prevent stack overflow.
         double *A_copy = malloc(num_neurons * num_neurons * sizeof(double));
         if (!A_copy) {
+#ifdef _OPENMP
             fprintf(stderr, "Error: Failed to allocate memory for A_copy in thread %d\n", omp_get_thread_num());
+#else
+            fprintf(stderr, "Error: Failed to allocate memory for A_copy\n");
+#endif
             continue; // Skip this iteration if memory allocation fails
         }
         memcpy(A_copy, A, num_neurons * num_neurons * sizeof(double));

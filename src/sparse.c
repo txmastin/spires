@@ -3,7 +3,9 @@
 #include <string.h>
 #include <math.h>
 #include <cblas.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 struct csr_matrix csr_build_from_dense(const double *dense, size_t n)
 {
