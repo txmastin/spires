@@ -753,10 +753,9 @@ void train_output_ridge_regression(struct reservoir *reservoir, double *input_se
 
     double *X_T = malloc(num_neurons * n_fit * sizeof(double));
     double *A = malloc(num_neurons * num_neurons * sizeof(double));
-    double *B = malloc(num_neurons * sizeof(double));
-    if (!X_T || !A || !B) {
+    if (!X_T || !A) {
         fprintf(stderr, "Failed to allocate memory for regression matrices.\n");
-        free(X); free(X_T); free(A); free(B);
+        free(X); free(X_T); free(A);
         return;
     }
 

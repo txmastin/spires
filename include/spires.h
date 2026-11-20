@@ -302,17 +302,20 @@ enum spires_metric_kind { SPIRES_METRIC_AUROC = 0, SPIRES_METRIC_AUPRC = 1 };
 
 struct spires_opt_score {
 	double	lambda_var;       /* penalty on std(metric) */
-	double	lambda_cost;      /* penalty on cost proxy */
-	int	metric;           /* enum spires_metric_kind */
+	int	metric;           /* reserved; currently ignored */
 	int	_reserved_i0;
 };
 
 struct spires_opt_result {
 	spires_reservoir_config  best_config;
         double                   best_log10_ridge;
-	double	                 best_score;   /* mean − λ_var*std − λ_cost*cost */
+	double	                 best_score;   /* mean − λ_var*std */
 	double	                 metric_mean;
 	double	                 metric_std;
+	double	                 best_alpha;   /* best fractional order α (Caputo, GL);
+	                                          NaN for models without one. best_config's
+	                                          neuron_params still points to the caller's
+	                                          array, which the optimizer does not modify */
 };
 
 int spires_optimize(const spires_reservoir_config *base_config,

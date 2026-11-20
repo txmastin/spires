@@ -4,6 +4,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <alloca.h>
+#include <time.h>
+
+static double now_sec(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+}
 
 // ------------------- Tiny RNG (PCG32) -------------------
 // Public domain PCG from O'Neill (minimal variant)
@@ -195,6 +203,10 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
 
     uint64_t rng = opt.seed ? opt.seed : 0xA57B17E5ULL;
 
+    const double t_start = now_sec();
+    int timed_out = 0;
+#define AGILE_OUT_OF_TIME() (opt.time_limit_sec > 0.0 && now_sec() - t_start >= opt.time_limit_sec)
+
 
     // Init
     vec_copy(theta, theta0, dim);
@@ -249,23 +261,20 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         double cand_loss = loss_fn(theta_cand, dim, ctx);
         total_evals++;
 
+        // Always move (Algorithm 1 of the AGILE paper): the walk continues
+        // through worse points, which is what lets a long Lévy step carry it
+        // out of a basin; the best point is tracked separately.
+        vec_copy(theta, theta_cand, dim);
+        loss = cand_loss;
 
-        if(cand_loss < loss) {
-            // Accept move
-            vec_copy(theta, theta_cand, dim);
-            loss = cand_loss;
+        if(loss < best_loss) {
+            best_loss = loss;
+            best_iter = total_iters;
+            vec_copy(theta_best, theta, dim);
             steps_since_improve = 0;
             patience *= opt.patience_decay;
-
-            
             if (patience < 1.0)
                 patience = 1.0;
-            // store best location if improved 
-            if(loss < best_loss) {
-                best_loss = loss;
-                best_iter = total_iters;
-                vec_copy(theta_best, theta, dim);
-            }
 
             if(opt.verbose) {
                 printf("[AGILE] iter %d improved: loss=%.6g, patience=%.2f\n", total_iters, loss, patience);
@@ -277,8 +286,14 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         }
 
 
-        if(dim > 64 && dvec) 
+        if(dim > 64 && dvec)
             free(dvec);
+
+        // Out of time: keep the best point so far and skip refinement
+        if(AGILE_OUT_OF_TIME()) {
+            timed_out = 1;
+            break;
+        }
 
         // Switch to refinement when budget exhausted
         if(steps_since_improve >= (int)ceil(patience)) {
@@ -302,6 +317,10 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         loss = best_loss;
         int no_improve = 0;
         for(int k=0; k<opt.refine_max_iters; ++k){
+            if(AGILE_OUT_OF_TIME()) {
+                timed_out = 1;
+                break;
+            }
             total_iters++;
             int have_grad = 0;
             if(grad_fn)
@@ -340,7 +359,9 @@ int agile_optimize(const double *theta0, const double *lower, const double *uppe
         report->total_evals = total_evals;
         report->total_iters = total_iters;
         report->exited_refinement = in_refinement;
+        report->timed_out = timed_out;
     }
+#undef AGILE_OUT_OF_TIME
 
 
     free(theta);

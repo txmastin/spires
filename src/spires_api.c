@@ -357,17 +357,12 @@ extern int spires_core_evaluate_config(const spires_reservoir_config *cfg,
                                        int num_seeds,
                                        double time_limit_sec,
                                        double *metric_mean, double *metric_std,
-                                       double *cost_proxy, int *feasible);
+                                       int *feasible);
 
-static size_t snap_N(double x) 
+static size_t snap_N(double x)
 {
-    static const size_t choices[] = {200, 400, 800, 1200};
-    size_t best = choices[0]; double bestd = fabs(x - (double)choices[0]);
-    for (size_t i = 1; i < sizeof(choices)/sizeof(choices[0]); i++) {
-        double d = fabs(x - (double)choices[i]);
-        if (d < bestd) { bestd = d; best = choices[i]; }
-    }
-    return best;
+    /* Any whole neuron count within the search bounds [200, 1200]. */
+    return (size_t)llround(fmin(1200.0, fmax(200.0, x)));
 }
 static int snap_topo(double t)
 {
@@ -382,8 +377,26 @@ struct opt_ctx
     const double *x;                      /* input data */
     const double *y;                      /* target series */
     size_t n;                             /* series length */
-    int alpha_index;                      /* where α lives in neuron_params (e.g., 0) */
+    int n_params;                         /* length of neuron_params for base->neuron_type */
+    int alpha_index;                      /* index of the fractional order α, or -1 if none */
 };
+
+/* Parameter layout of each neuron model (see the init_* functions in
+ * src/neurons/). Only the fractional-order models have an α for the
+ * optimizer to tune; the power-law refractory neuron's params[4] is the
+ * exponent of its refractory distribution, not a fractional order. */
+#define OPT_MAX_NEURON_PARAMS 9
+static void neuron_param_layout(spires_neuron_type t, int *n_params, int *alpha_index)
+{
+	switch (t) {
+	case SPIRES_NEURON_LIF_DISCRETE:            *n_params = 4; *alpha_index = -1; break;
+	case SPIRES_NEURON_LIF_BIO:                 *n_params = 4; *alpha_index = -1; break;
+	case SPIRES_NEURON_FLIF_CAPUTO:             *n_params = 9; *alpha_index =  6; break;
+	case SPIRES_NEURON_FLIF_GL:                 *n_params = 8; *alpha_index =  4; break;
+	case SPIRES_NEURON_LIF_POWERLAW_REFRACTORY: *n_params = 7; *alpha_index = -1; break;
+	default:                                    *n_params = 0; *alpha_index = -1; break;
+	}
+}
 
 static double eval_mse(spires_reservoir *r,
 		       const double *x, const double *y,
@@ -436,7 +449,7 @@ static int eval_adapter(const struct spires_opt_params *pr,
 			const struct spires_budget *budget,
 			void *user_ctx,
 			double *metric_mean, double *metric_std,
-			double *cost_proxy, int *feasible)
+			int *feasible)
 {
 	const struct opt_ctx *ctx = (const struct opt_ctx *)user_ctx;
 
@@ -449,10 +462,13 @@ static int eval_adapter(const struct spires_opt_params *pr,
 	cfg.ei_ratio          = pr->e_over_i;
 	cfg.connectivity_type = (spires_connectivity_type) snap_topo(pr->topo_cont);
 
-	double local_params[8] = {0};
-	if (!cfg.neuron_params)
-		cfg.neuron_params = local_params;
-	cfg.neuron_params[ctx->alpha_index] = pr->alpha;
+	/* Tune α on a private copy: the caller's array is never written, and
+	 * every reservoir built from this copy is destroyed before we return. */
+	double params[OPT_MAX_NEURON_PARAMS];
+	memcpy(params, ctx->base->neuron_params, (size_t)ctx->n_params * sizeof *params);
+	if (ctx->alpha_index >= 0)
+		params[ctx->alpha_index] = pr->alpha;
+	cfg.neuron_params = params;
 
         const size_t din  = cfg.num_inputs  ? cfg.num_inputs  : 1;
         const size_t dout = cfg.num_outputs ? cfg.num_outputs : 1;
@@ -463,7 +479,6 @@ static int eval_adapter(const struct spires_opt_params *pr,
 		*feasible = 0;
 		*metric_mean = 0.0;
 		*metric_std  = 1.0;
-		*cost_proxy  = 1.0;
 		return 0;
 	}
 	size_t n_valid = ctx->n - n_train;
@@ -473,6 +488,10 @@ static int eval_adapter(const struct spires_opt_params *pr,
 	int ok = 0;
 
 	for (int s = 0; s < seeds; s++) {
+		/* One independent network per repeat: the same seed always gives the
+		 * same network, so without this every repeat would be identical and
+		 * metric_std would be zero. Repeat 0 is the caller's own seed. */
+		cfg.seed = ctx->base->seed + 0x9E3779B97F4A7C15ULL * (uint64_t)s;
 		spires_reservoir *r = NULL;
 		if (spires_reservoir_create(&cfg, &r) != SPIRES_OK || !r)
 			continue;
@@ -509,7 +528,6 @@ static int eval_adapter(const struct spires_opt_params *pr,
 		*feasible = 0;
 		*metric_mean = 0.0;
 		*metric_std  = 1.0;
-		*cost_proxy  = 1.0;
 		return 0;
 	}
 
@@ -518,10 +536,6 @@ static int eval_adapter(const struct spires_opt_params *pr,
 
 	*metric_mean = mean;
 	*metric_std  = sqrt(var);
-
-	/* simple cost proxy: size × inverse sparsity */
-	double sparsity = cfg.connectivity > 1e-8 ? cfg.connectivity : 1e-8;
-	*cost_proxy = (double)cfg.num_neurons * (1.0 / sparsity) * 1e-6;
 
 	*feasible = 1;
 	return 0;
@@ -536,8 +550,13 @@ int spires_optimize(const spires_reservoir_config *base_config,
                     const double *target_series,
                     size_t series_length)
 {
-        printf("[SPIRES] spires_optimize entered\n"); fflush(stdout);
-	if (!base_config || !budgets_pub || num_budgets <= 0 || !score_pub || !out_pub)
+	if (!base_config || !budgets_pub || num_budgets <= 0 || !score_pub || !out_pub
+	    || !base_config->neuron_params)
+		return -1;
+
+	int n_params, alpha_index;
+	neuron_param_layout(base_config->neuron_type, &n_params, &alpha_index);
+	if (n_params == 0)
 		return -1;
 
 	struct spires_budget *buds = (struct spires_budget *)calloc((size_t)num_budgets, sizeof(*buds));
@@ -551,7 +570,6 @@ int spires_optimize(const spires_reservoir_config *base_config,
 
 	struct spires_score_opts sopt = {
 		.lambda_var  = score_pub->lambda_var,
-		.lambda_cost = score_pub->lambda_cost,
 		.use_auprc   = (score_pub->metric == SPIRES_METRIC_AUPRC)
 	};
 
@@ -561,12 +579,25 @@ int spires_optimize(const spires_reservoir_config *base_config,
             .x = input_series,
             .y = target_series,
             .n = series_length,
-            .alpha_index = 4
-        }; 
-        
-        printf("[SPIRES] calling wrapper (budgets=%d)\n", num_budgets); fflush(stdout);
+            .n_params = n_params,
+            .alpha_index = alpha_index
+        };
 
-	int rc = spires_optimize_with_agile(eval_adapter, &ctx, buds, num_budgets, &sopt, &ires);
+	/* Start the search from the caller's configuration. The ridge starts at
+	 * 1e-2, since the configuration has no ridge field, and α from the
+	 * parameter array for the fractional models (unused otherwise). */
+	const struct spires_opt_params start = {
+		.alpha           = alpha_index >= 0 ? base_config->neuron_params[alpha_index] : 0.55,
+		.spectral_radius = base_config->spectral_radius,
+		.input_gain      = base_config->input_strength,
+		.connectivity    = base_config->connectivity,
+		.e_over_i        = base_config->ei_ratio,
+		.log10_ridge     = -2.0,
+		.n_cont          = (double)base_config->num_neurons,
+		.topo_cont       = (double)base_config->connectivity_type
+	};
+
+	int rc = spires_optimize_with_agile(&start, eval_adapter, &ctx, buds, num_budgets, &sopt, &ires);
 	free(buds);
 	if (rc)
             return rc;
@@ -581,6 +612,7 @@ int spires_optimize(const spires_reservoir_config *base_config,
 	out_pub->best_config.connectivity_type = (spires_connectivity_type)snap_topo(ires.best_params.topo_cont);
 
 	out_pub->best_log10_ridge = ires.best_params.log10_ridge;
+	out_pub->best_alpha       = alpha_index >= 0 ? ires.best_params.alpha : NAN;
 	out_pub->metric_mean      = ires.best_metric_mean;
 	out_pub->metric_std       = ires.best_metric_std;
 	out_pub->best_score       = ires.best_score;

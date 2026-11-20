@@ -38,6 +38,10 @@ struct agile_options {
 	/* Bounds & projection */
 	int    reflect_at_bounds; /* 0 = clamp, 1 = reflect */
 
+	/* Wall-clock limit for one call, in seconds; 0 = none. Checked between
+	 * objective evaluations, so an evaluation in progress always finishes. */
+	double time_limit_sec;
+
 	/* RNG and logging */
 	uint64_t seed;          /* PRNG seed for reproducibility */
 	int      verbose;       /* >0 prints progress to stderr */
@@ -56,6 +60,7 @@ struct agile_report {
 	int    total_evals;     /* number of objective evaluations performed */
 	int    total_iters;     /* iterations including refinement */
 	int    exited_refinement; /* 1 if refinement phase was entered */
+	int    timed_out;       /* 1 if time_limit_sec ended the run */
 };
 
 /*
